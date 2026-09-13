@@ -1,0 +1,12 @@
+This package includes bridge32.exe, bridge64.exe, speedpatch32.dll and
+speedpatch64.dll from OpenSpeedy 3.3.11.
+
+Touhou Speed Controller launcher copyright (C) 2026 StarLorentz.
+The complete package is distributed under GNU GPL v3.0.
+
+Project: https://github.com/game1024/OpenSpeedy
+Release: https://github.com/game1024/OpenSpeedy/releases/tag/3.3.11
+Source commit: 8466ca9d9f2492db14346e58a6be8b44fc7d2a2e
+License: GNU General Public License v3.0
+
+The Touhou-specific WinForms launcher source is included in src\.
