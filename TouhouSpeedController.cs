@@ -22,8 +22,8 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("StarLorentz")]
 [assembly: AssemblyProduct("东方变速器")]
 [assembly: AssemblyCopyright("Copyright © 2026 StarLorentz")]
-[assembly: AssemblyVersion("0.2.0.0")]
-[assembly: AssemblyFileVersion("0.2.0.0")]
+[assembly: AssemblyVersion("0.1.1.0")]
+[assembly: AssemblyFileVersion("0.1.1.0")]
 
 namespace TouhouSpeedController
 {
@@ -236,7 +236,7 @@ namespace TouhouSpeedController
             status.Text = "正在启动变速后端……";
             Controls.Add(status);
 
-            Label version = NewLabel("v0.2.0 · 非官方个人工具", 24, 318, 210, 24, 9F, false);
+            Label version = NewLabel("v0.1.1 · 非官方个人工具", 24, 318, 210, 24, 9F, false);
             version.ForeColor = Color.DimGray;
             Controls.Add(version);
             LinkLabel biliLink = new LinkLabel();

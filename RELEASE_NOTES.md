@@ -1,10 +1,10 @@
-# 东方变速器 v0.2.0
+# 东方变速器 v0.1.1
 
 本版本完善多种东方正作发行版本的进程识别，并适配 Steam 新上架的《东方红魔乡：原典》《东方红魔乡：新典》。
 
 ## 下载
 
-下载 `TouhouSpeedController-v0.2.0-win.zip` 并完整解压，然后运行 `东方变速器.exe`。普通玩家只需要下载这个文件。
+下载 `TouhouSpeedController-v0.1.1-win.zip` 并完整解压，然后运行 `东方变速器.exe`。普通玩家只需要下载这个文件。
 
 ## 更新内容
 
@@ -12,7 +12,7 @@
 - 新增并实测 Steam TH06 新典 `th06nc.exe`
 - 完善日文原版及常见汉化版主程序名称识别
 - 收紧识别规则，避免把配置器、补丁器和分数转换工具误识别为游戏
-- 程序和说明文件版本更新为 v0.2.0
+- 程序和说明文件版本更新为 v0.1.1
 
 ## 本机实测范围
 
@@ -31,7 +31,7 @@
 ## SHA-256
 
 ```text
-AAB6EA51300E6FB83F16712068FFB604D6AFE57C6231E8AF504E1EC3461322F0  TouhouSpeedController-v0.2.0-win.zip
+4EEBBE56ED7817D0DE4D7B62906D065202F21EC6BDC8664ACD811DC449E38F61  TouhouSpeedController-v0.1.1-win.zip
 DF8469A50A59E38FBBE56253D8C12FEB07EC8848B61179D34B8B7733E68D99EA  OpenSpeedy-source-8466ca9.zip
 ```
 
