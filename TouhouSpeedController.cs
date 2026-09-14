@@ -22,8 +22,8 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("StarLorentz")]
 [assembly: AssemblyProduct("东方变速器")]
 [assembly: AssemblyCopyright("Copyright © 2026 StarLorentz")]
-[assembly: AssemblyVersion("0.1.0.0")]
-[assembly: AssemblyFileVersion("0.1.0.0")]
+[assembly: AssemblyVersion("0.2.0.0")]
+[assembly: AssemblyFileVersion("0.2.0.0")]
 
 namespace TouhouSpeedController
 {
@@ -236,7 +236,7 @@ namespace TouhouSpeedController
             status.Text = "正在启动变速后端……";
             Controls.Add(status);
 
-            Label version = NewLabel("v0.1.0 · 非官方个人工具", 24, 318, 210, 24, 9F, false);
+            Label version = NewLabel("v0.2.0 · 非官方个人工具", 24, 318, 210, 24, 9F, false);
             version.ForeColor = Color.DimGray;
             Controls.Add(version);
             LinkLabel biliLink = new LinkLabel();
@@ -332,16 +332,27 @@ namespace TouhouSpeedController
         {
             try
             {
-                string name = p.ProcessName.ToLowerInvariant();
-                Match main = Regex.Match(name, @"^th(\d{2})(?:[a-z].*)?$");
-                if (main.Success)
-                {
-                    int n;
-                    if (Int32.TryParse(main.Groups[1].Value, out n) && n >= 6 && n <= 20) return true;
-                }
-                return Regex.IsMatch(name, @"^th\d{3}(?:[a-z].*)?$");
+                return IsTouhouProcessName(p.ProcessName);
             }
             catch { return false; }
+        }
+
+        internal static bool IsTouhouProcessName(string processName)
+        {
+            if (String.IsNullOrWhiteSpace(processName)) return false;
+            string name = processName.Trim().ToLowerInvariant();
+
+            // TH06–TH20 main games, including common language suffixes and the
+            // Steam TH06 Classic/New Classic executables: th06c and th06nc.
+            Match main = Regex.Match(name, @"^th(\d{2})(?:[a-z]{1,4}| \([^)]+\))?$");
+            if (main.Success)
+            {
+                int n;
+                if (Int32.TryParse(main.Groups[1].Value, out n) && n >= 6 && n <= 20) return true;
+            }
+
+            // Common decimal-numbered Touhou games such as th095 and th125.
+            return Regex.IsMatch(name, @"^th\d{3}(?:[a-z]{1,4})?$");
         }
 
         private static GameProcess CreateGameProcess(Process p)
