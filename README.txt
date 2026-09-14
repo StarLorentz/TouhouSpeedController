@@ -55,7 +55,8 @@ GitHub：https://github.com/StarLorentz/TouhouSpeedController
 ------------------
 东方Project及十六夜咲夜相关权利归上海爱丽丝幻乐团及原作者所有。本软件是
 非官方个人制作，与原作者不存在授权或隶属关系。软件不包含东方游戏本体、
-音乐、立绘或其他原作数据。程序图标使用生成式 AI 制作的咲夜二次创作图像。
+音乐、立绘或其他原作数据。程序、快捷方式和任务栏图标使用作者提供的个人
+头像；窗口内展示图使用生成式 AI 制作的咲夜二次创作图像。
 
 自制界面和东方进程识别代码位于 src\TouhouSpeedController.cs。
 底层 bridge 和 speedpatch 组件来自 OpenSpeedy 3.3.11：

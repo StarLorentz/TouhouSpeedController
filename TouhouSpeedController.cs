@@ -198,13 +198,13 @@ namespace TouhouSpeedController
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
 
-            string logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logo.png");
-            if (File.Exists(logoPath))
+            string appImagePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app-image.png");
+            if (File.Exists(appImagePath))
             {
                 PictureBox logo = new PictureBox();
                 logo.SetBounds(24, 12, 68, 68);
                 logo.SizeMode = PictureBoxSizeMode.Zoom;
-                logo.Image = Image.FromFile(logoPath);
+                logo.Image = Image.FromFile(appImagePath);
                 Controls.Add(logo);
             }
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }

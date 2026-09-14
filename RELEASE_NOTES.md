@@ -12,6 +12,7 @@
 - 新增并实测 Steam TH06 新典 `th06nc.exe`
 - 完善日文原版及常见汉化版主程序名称识别
 - 收紧识别规则，避免把配置器、补丁器和分数转换工具误识别为游戏
+- 区分程序标志与窗口展示图：程序图标使用作者头像，窗口内使用咲夜图
 - 程序和说明文件版本更新为 v0.1.1
 
 ## 本机实测范围
@@ -31,7 +32,7 @@
 ## SHA-256
 
 ```text
-4EEBBE56ED7817D0DE4D7B62906D065202F21EC6BDC8664ACD811DC449E38F61  TouhouSpeedController-v0.1.1-win.zip
+6867586768ED9631CFC76D7A10D490A4CB1EB17A3EAC5A66EA3E3F76EE4C3911  TouhouSpeedController-v0.1.1-win.zip
 DF8469A50A59E38FBBE56253D8C12FEB07EC8848B61179D34B8B7733E68D99EA  OpenSpeedy-source-8466ca9.zip
 ```
 

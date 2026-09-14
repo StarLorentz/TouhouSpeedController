@@ -22,9 +22,9 @@ if ($LASTEXITCODE -ne 0) { throw "C# compiler failed with exit code $LASTEXITCOD
 
 Copy-Item -LiteralPath "$portableDir\bridge32.exe","$portableDir\bridge64.exe","$portableDir\speedpatch32.dll","$portableDir\speedpatch64.dll" -Destination $packageDir -Force
 Copy-Item -LiteralPath "$projectDir\README.txt","$projectDir\OPEN_SOURCE_NOTICE.txt" -Destination $packageDir -Force
-Copy-Item -LiteralPath "$projectDir\assets\logo.png" -Destination $packageDir -Force
+Copy-Item -LiteralPath "$projectDir\assets\logo.png","$projectDir\assets\app-image.png" -Destination $packageDir -Force
 Copy-Item -LiteralPath "$projectDir\TouhouSpeedController.cs","$projectDir\app.manifest","$projectDir\build.ps1" -Destination (Join-Path $packageDir 'src') -Force
-Copy-Item -LiteralPath "$projectDir\assets\logo.png","$projectDir\assets\logo.ico" -Destination (Join-Path $packageDir 'src') -Force
+Copy-Item -LiteralPath "$projectDir\assets\logo.png","$projectDir\assets\logo.ico","$projectDir\assets\app-image.png" -Destination (Join-Path $packageDir 'src') -Force
 Copy-Item -LiteralPath $openSpeedyLicense -Destination (Join-Path $packageDir 'LICENSE-GPLv3.txt') -Force
 
 Write-Host "Built package: $packageDir"
