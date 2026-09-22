@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "game": "TH16",
-  "status": "fingerprint-only",
+  "status": "development",
   "profiles": [
     {
       "id": "th16-local-japanese",
@@ -9,8 +9,8 @@
       "sha256": "C11776019F083978E66027E7394DAFB1FB9543AFCA986F28049A49417E341929",
       "architecture": "x86",
       "origin": "Observed on the development machine",
-      "practiceSupport": "read-only-preview",
-      "memoryWritesEnabled": false
+      "practiceSupport": "resource-read-write-preview",
+      "memoryWritesEnabled": true
     },
     {
       "id": "th16-local-chinese-static-patch",
