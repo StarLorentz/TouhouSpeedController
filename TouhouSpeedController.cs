@@ -199,8 +199,6 @@ namespace TouhouSpeedController
         private readonly Button applyPracticePower = new Button();
         private readonly CheckBox infiniteLives = new CheckBox();
         private readonly CheckBox infiniteBombs = new CheckBox();
-        private readonly CheckBox infiniteBombFragments = new CheckBox();
-        private readonly CheckBox infinitePower = new CheckBox();
         private readonly System.Windows.Forms.Timer practiceFreezeTimer = new System.Windows.Forms.Timer();
         private SpeedBackend backend;
         private volatile bool closing;
@@ -259,7 +257,7 @@ namespace TouhouSpeedController
             practiceGroup.Controls.Add(practiceLives);
             ConfigurePracticeApplyButton(applyPracticeLives, "应用", 125, 53, delegate { ApplyPracticeFields(true, false, false, false); });
             practiceGroup.Controls.Add(applyPracticeLives);
-            ConfigureInfiniteCheckBox(infiniteLives, 190, 54);
+            ConfigureInfiniteCheckBox(infiniteLives, 188, 54);
             practiceGroup.Controls.Add(infiniteLives);
 
             practiceGroup.Controls.Add(NewLabel("Bomb", 250, 57, 44, 24, 9F, false));
@@ -267,7 +265,7 @@ namespace TouhouSpeedController
             practiceGroup.Controls.Add(practiceBombs);
             ConfigurePracticeApplyButton(applyPracticeBombs, "应用", 365, 53, delegate { ApplyPracticeFields(false, true, false, false); });
             practiceGroup.Controls.Add(applyPracticeBombs);
-            ConfigureInfiniteCheckBox(infiniteBombs, 425, 54);
+            ConfigureInfiniteCheckBox(infiniteBombs, 423, 54);
             practiceGroup.Controls.Add(infiniteBombs);
 
             practiceGroup.Controls.Add(NewLabel("碎片", 14, 94, 42, 24, 9F, false));
@@ -275,16 +273,12 @@ namespace TouhouSpeedController
             practiceGroup.Controls.Add(practiceBombFragments);
             ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 125, 90, delegate { ApplyPracticeFields(false, false, true, false); });
             practiceGroup.Controls.Add(applyPracticeBombFragments);
-            ConfigureInfiniteCheckBox(infiniteBombFragments, 190, 91);
-            practiceGroup.Controls.Add(infiniteBombFragments);
 
             practiceGroup.Controls.Add(NewLabel("Power", 250, 94, 44, 24, 9F, false));
             ConfigurePracticeNumber(practicePower, 298, 91, 60, 0, 4, 2, 0.01m);
             practiceGroup.Controls.Add(practicePower);
             ConfigurePracticeApplyButton(applyPracticePower, "应用", 365, 90, delegate { ApplyPracticeFields(false, false, false, true); });
             practiceGroup.Controls.Add(applyPracticePower);
-            ConfigureInfiniteCheckBox(infinitePower, 425, 91);
-            practiceGroup.Controls.Add(infinitePower);
 
             readPractice.Text = "读取当前值";
             readPractice.SetBounds(260, 129, 100, 30);
@@ -531,7 +525,7 @@ namespace TouhouSpeedController
 
         private void ConfigureInfiniteCheckBox(CheckBox box, int x, int y)
         {
-            box.Text = "无限"; box.SetBounds(x, y, 60, 27);
+            box.Text = "无限"; box.Font = new Font(Font.FontFamily, 9F); box.SetBounds(x, y, 58, 27);
             box.CheckedChanged += InfiniteSelectionChanged;
         }
 
@@ -573,8 +567,8 @@ namespace TouhouSpeedController
                     game.Process,
                     infiniteLives.Checked ? (int?)Decimal.ToInt32(practiceLives.Value) : null,
                     infiniteBombs.Checked ? (int?)Decimal.ToInt32(practiceBombs.Value) : null,
-                    infiniteBombFragments.Checked ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null,
-                    infinitePower.Checked ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null);
+                    null,
+                    null);
                 return true;
             }
             catch (Exception ex)
@@ -587,8 +581,7 @@ namespace TouhouSpeedController
 
         private bool HasInfiniteSelection()
         {
-            return infiniteLives.Checked || infiniteBombs.Checked ||
-                infiniteBombFragments.Checked || infinitePower.Checked;
+            return infiniteLives.Checked || infiniteBombs.Checked;
         }
 
         private void StopInfiniteResources()
@@ -599,15 +592,13 @@ namespace TouhouSpeedController
             {
                 infiniteLives.Checked = false;
                 infiniteBombs.Checked = false;
-                infiniteBombFragments.Checked = false;
-                infinitePower.Checked = false;
             }
             finally { updatingInfiniteChecks = false; }
         }
 
         private static void ConfigurePracticeApplyButton(Button button, string text, int x, int y, EventHandler handler)
         {
-            button.Text = text; button.SetBounds(x, y, 62, 28); button.Click += handler;
+            button.Text = text; button.SetBounds(x, y, 56, 28); button.Click += handler;
         }
 
         private static void ConfigurePracticeNumber(NumericUpDown box, int x, int y, int width,
@@ -631,8 +622,6 @@ namespace TouhouSpeedController
             applyPracticeAll.Enabled = enabled;
             infiniteLives.Enabled = enabled;
             infiniteBombs.Enabled = enabled;
-            infiniteBombFragments.Enabled = enabled;
-            infinitePower.Enabled = enabled;
         }
 
         private void SetStatus(string text, bool error)
