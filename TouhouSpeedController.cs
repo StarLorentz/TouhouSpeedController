@@ -197,14 +197,20 @@ namespace TouhouSpeedController
         private readonly Button applyPracticeBombs = new Button();
         private readonly Button applyPracticeBombFragments = new Button();
         private readonly Button applyPracticePower = new Button();
+        private readonly CheckBox infiniteLives = new CheckBox();
+        private readonly CheckBox infiniteBombs = new CheckBox();
+        private readonly CheckBox infiniteBombFragments = new CheckBox();
+        private readonly CheckBox infinitePower = new CheckBox();
+        private readonly System.Windows.Forms.Timer practiceFreezeTimer = new System.Windows.Forms.Timer();
         private SpeedBackend backend;
         private volatile bool closing;
+        private bool updatingInfiniteChecks;
 
         public MainForm()
         {
             Text = "东方变速器";
             Font = new Font("Microsoft YaHei UI", 10F);
-            ClientSize = new Size(540, 548);
+            ClientSize = new Size(540, 568);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -248,29 +254,37 @@ namespace TouhouSpeedController
             practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
             practiceGroup.Controls.Add(practiceSupport);
 
-            practiceGroup.Controls.Add(NewLabel("残机", 14, 57, 38, 24, 9F, false));
-            ConfigurePracticeNumber(practiceLives, 52, 54, 48, 0, 8, 0, 1);
+            practiceGroup.Controls.Add(NewLabel("残机", 14, 57, 42, 24, 9F, false));
+            ConfigurePracticeNumber(practiceLives, 62, 54, 55, 0, 8, 0, 1);
             practiceGroup.Controls.Add(practiceLives);
-            ConfigurePracticeApplyButton(applyPracticeLives, "应用", 106, 53, delegate { ApplyPracticeFields(true, false, false, false); });
+            ConfigurePracticeApplyButton(applyPracticeLives, "应用", 125, 53, delegate { ApplyPracticeFields(true, false, false, false); });
             practiceGroup.Controls.Add(applyPracticeLives);
+            ConfigureInfiniteCheckBox(infiniteLives, 190, 54);
+            practiceGroup.Controls.Add(infiniteLives);
 
-            practiceGroup.Controls.Add(NewLabel("Bomb", 204, 57, 46, 24, 9F, false));
-            ConfigurePracticeNumber(practiceBombs, 250, 54, 48, 0, 8, 0, 1);
+            practiceGroup.Controls.Add(NewLabel("Bomb", 250, 57, 44, 24, 9F, false));
+            ConfigurePracticeNumber(practiceBombs, 298, 54, 60, 0, 8, 0, 1);
             practiceGroup.Controls.Add(practiceBombs);
-            ConfigurePracticeApplyButton(applyPracticeBombs, "应用", 304, 53, delegate { ApplyPracticeFields(false, true, false, false); });
+            ConfigurePracticeApplyButton(applyPracticeBombs, "应用", 365, 53, delegate { ApplyPracticeFields(false, true, false, false); });
             practiceGroup.Controls.Add(applyPracticeBombs);
+            ConfigureInfiniteCheckBox(infiniteBombs, 425, 54);
+            practiceGroup.Controls.Add(infiniteBombs);
 
-            practiceGroup.Controls.Add(NewLabel("碎片", 14, 94, 38, 24, 9F, false));
-            ConfigurePracticeNumber(practiceBombFragments, 52, 91, 48, 0, 4, 0, 1);
+            practiceGroup.Controls.Add(NewLabel("碎片", 14, 94, 42, 24, 9F, false));
+            ConfigurePracticeNumber(practiceBombFragments, 62, 91, 55, 0, 4, 0, 1);
             practiceGroup.Controls.Add(practiceBombFragments);
-            ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 106, 90, delegate { ApplyPracticeFields(false, false, true, false); });
+            ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 125, 90, delegate { ApplyPracticeFields(false, false, true, false); });
             practiceGroup.Controls.Add(applyPracticeBombFragments);
+            ConfigureInfiniteCheckBox(infiniteBombFragments, 190, 91);
+            practiceGroup.Controls.Add(infiniteBombFragments);
 
-            practiceGroup.Controls.Add(NewLabel("Power", 204, 94, 48, 24, 9F, false));
-            ConfigurePracticeNumber(practicePower, 250, 91, 76, 0, 4, 2, 0.01m);
+            practiceGroup.Controls.Add(NewLabel("Power", 250, 94, 44, 24, 9F, false));
+            ConfigurePracticeNumber(practicePower, 298, 91, 60, 0, 4, 2, 0.01m);
             practiceGroup.Controls.Add(practicePower);
-            ConfigurePracticeApplyButton(applyPracticePower, "应用", 332, 90, delegate { ApplyPracticeFields(false, false, false, true); });
+            ConfigurePracticeApplyButton(applyPracticePower, "应用", 365, 90, delegate { ApplyPracticeFields(false, false, false, true); });
             practiceGroup.Controls.Add(applyPracticePower);
+            ConfigureInfiniteCheckBox(infinitePower, 425, 91);
+            practiceGroup.Controls.Add(infinitePower);
 
             readPractice.Text = "读取当前值";
             readPractice.SetBounds(260, 129, 100, 30);
@@ -283,27 +297,31 @@ namespace TouhouSpeedController
             SetPracticeInputsEnabled(false);
             Controls.Add(practiceGroup);
             processBox.SelectedIndexChanged += delegate { ResetPracticePreview(); };
+            practiceFreezeTimer.Interval = 100;
+            practiceFreezeTimer.Tick += MaintainInfiniteResources;
 
-            status.SetBounds(24, 433, 486, 54);
+            status.SetBounds(24, 433, 486, 72);
             status.BorderStyle = BorderStyle.FixedSingle;
             status.Padding = new Padding(8);
+            status.AutoSize = false;
+            status.UseCompatibleTextRendering = true;
             status.Text = "正在启动变速后端……";
             Controls.Add(status);
 
-            Label version = NewLabel("v0.1.1 · 开发分支 · 非官方个人工具", 24, 506, 240, 24, 9F, false);
+            Label version = NewLabel("v0.1.1 · 开发分支 · 非官方个人工具", 24, 526, 240, 24, 9F, false);
             version.ForeColor = Color.DimGray;
             Controls.Add(version);
             LinkLabel biliLink = new LinkLabel();
-            biliLink.Text = "B站：斯塔罗尔"; biliLink.SetBounds(272, 506, 112, 24);
+            biliLink.Text = "B站：斯塔罗尔"; biliLink.SetBounds(272, 526, 112, 24);
             biliLink.LinkClicked += delegate { OpenUrl("https://space.bilibili.com/456339208"); };
             Controls.Add(biliLink);
             LinkLabel githubLink = new LinkLabel();
-            githubLink.Text = "GitHub 反馈"; githubLink.SetBounds(400, 506, 110, 24);
+            githubLink.Text = "GitHub 反馈"; githubLink.SetBounds(400, 526, 110, 24);
             githubLink.LinkClicked += delegate { OpenUrl("https://github.com/StarLorentz/TouhouSpeedController/issues"); };
             Controls.Add(githubLink);
 
             Shown += delegate { BeginInitializeBackend(); };
-            FormClosing += delegate { closing = true; if (backend != null) backend.Dispose(); };
+            FormClosing += delegate { closing = true; practiceFreezeTimer.Stop(); if (backend != null) backend.Dispose(); };
         }
 
         private Label NewLabel(string text, int x, int y, int w, int h, float size, bool bold)
@@ -445,6 +463,7 @@ namespace TouhouSpeedController
 
         private void ResetPracticePreview()
         {
+            StopInfiniteResources();
             practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
             practiceSupport.ForeColor = SystemColors.ControlText;
             practiceLives.Value = 0;
@@ -504,10 +523,86 @@ namespace TouhouSpeedController
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;
                 practicePower.Value = snapshot.Power / 100m;
-                string hudNote = (changeLives || changeBombs) ? " 残机/Bomb 的 HUD 可能在下次消耗或场景刷新后更新。" : String.Empty;
-                SetStatus("所选资源已应用并回读验证成功。" + hudNote, false);
+                string hudNote = (changeLives || changeBombs) ? " 残机/Bomb 的界面数字会稍后刷新。" : String.Empty;
+                SetStatus("所选资源已应用并校验成功。" + hudNote, false);
             }
             catch (Exception ex) { SetStatus("应用失败：" + ex.Message, true); }
+        }
+
+        private void ConfigureInfiniteCheckBox(CheckBox box, int x, int y)
+        {
+            box.Text = "无限"; box.SetBounds(x, y, 60, 27);
+            box.CheckedChanged += InfiniteSelectionChanged;
+        }
+
+        private void InfiniteSelectionChanged(object sender, EventArgs e)
+        {
+            if (updatingInfiniteChecks) return;
+            if (!HasInfiniteSelection())
+            {
+                practiceFreezeTimer.Stop();
+                SetStatus("无限资源已停止。当前资源数值保持不变。", false);
+                return;
+            }
+
+            if (ApplyInfiniteResources())
+            {
+                practiceFreezeTimer.Start();
+                SetStatus("已锁定勾选的无限资源；取消勾选或退出工具即可停止。", false);
+            }
+        }
+
+        private void MaintainInfiniteResources(object sender, EventArgs e)
+        {
+            ApplyInfiniteResources();
+        }
+
+        private bool ApplyInfiniteResources()
+        {
+            GameProcess game = processBox.SelectedItem as GameProcess;
+            if (game == null)
+            {
+                StopInfiniteResources();
+                SetStatus("无限资源已停止：游戏进程不存在。", true);
+                return false;
+            }
+
+            try
+            {
+                PracticeMemoryAccess.WriteTh16(
+                    game.Process,
+                    infiniteLives.Checked ? (int?)Decimal.ToInt32(practiceLives.Value) : null,
+                    infiniteBombs.Checked ? (int?)Decimal.ToInt32(practiceBombs.Value) : null,
+                    infiniteBombFragments.Checked ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null,
+                    infinitePower.Checked ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                StopInfiniteResources();
+                SetStatus("无限资源已停止：" + ex.Message, true);
+                return false;
+            }
+        }
+
+        private bool HasInfiniteSelection()
+        {
+            return infiniteLives.Checked || infiniteBombs.Checked ||
+                infiniteBombFragments.Checked || infinitePower.Checked;
+        }
+
+        private void StopInfiniteResources()
+        {
+            practiceFreezeTimer.Stop();
+            updatingInfiniteChecks = true;
+            try
+            {
+                infiniteLives.Checked = false;
+                infiniteBombs.Checked = false;
+                infiniteBombFragments.Checked = false;
+                infinitePower.Checked = false;
+            }
+            finally { updatingInfiniteChecks = false; }
         }
 
         private static void ConfigurePracticeApplyButton(Button button, string text, int x, int y, EventHandler handler)
@@ -534,6 +629,10 @@ namespace TouhouSpeedController
             applyPracticeBombFragments.Enabled = enabled;
             applyPracticePower.Enabled = enabled;
             applyPracticeAll.Enabled = enabled;
+            infiniteLives.Enabled = enabled;
+            infiniteBombs.Enabled = enabled;
+            infiniteBombFragments.Enabled = enabled;
+            infinitePower.Enabled = enabled;
         }
 
         private void SetStatus(string text, bool error)
