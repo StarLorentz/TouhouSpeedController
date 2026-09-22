@@ -186,6 +186,9 @@ namespace TouhouSpeedController
         private readonly Button apply = new Button();
         private readonly Button restore = new Button();
         private readonly Button refresh = new Button();
+        private readonly Label practiceSupport = new Label();
+        private readonly Label practiceValues = new Label();
+        private readonly Button readPractice = new Button();
         private SpeedBackend backend;
         private volatile bool closing;
 
@@ -193,7 +196,7 @@ namespace TouhouSpeedController
         {
             Text = "东方变速器";
             Font = new Font("Microsoft YaHei UI", 10F);
-            ClientSize = new Size(540, 360);
+            ClientSize = new Size(540, 475);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -230,21 +233,37 @@ namespace TouhouSpeedController
             apply.Enabled = false; restore.Enabled = false;
             Controls.Add(apply); Controls.Add(restore);
 
-            status.SetBounds(24, 250, 486, 54);
+            GroupBox practiceGroup = new GroupBox();
+            practiceGroup.Text = "练习功能（TH16 只读预览）";
+            practiceGroup.SetBounds(24, 248, 486, 104);
+            practiceSupport.SetBounds(14, 24, 450, 25);
+            practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
+            practiceGroup.Controls.Add(practiceSupport);
+            practiceValues.SetBounds(14, 62, 350, 25);
+            practiceValues.Text = "残机：—　Bomb：—　Bomb碎片：—　Power：—";
+            practiceGroup.Controls.Add(practiceValues);
+            readPractice.Text = "读取当前值";
+            readPractice.SetBounds(370, 56, 100, 32);
+            readPractice.Click += ReadPracticeClicked;
+            practiceGroup.Controls.Add(readPractice);
+            Controls.Add(practiceGroup);
+            processBox.SelectedIndexChanged += delegate { ResetPracticePreview(); };
+
+            status.SetBounds(24, 365, 486, 54);
             status.BorderStyle = BorderStyle.FixedSingle;
             status.Padding = new Padding(8);
             status.Text = "正在启动变速后端……";
             Controls.Add(status);
 
-            Label version = NewLabel("v0.1.1 · 非官方个人工具", 24, 318, 210, 24, 9F, false);
+            Label version = NewLabel("v0.1.1 · 开发分支 · 非官方个人工具", 24, 433, 240, 24, 9F, false);
             version.ForeColor = Color.DimGray;
             Controls.Add(version);
             LinkLabel biliLink = new LinkLabel();
-            biliLink.Text = "B站：斯塔罗尔"; biliLink.SetBounds(252, 318, 112, 24);
+            biliLink.Text = "B站：斯塔罗尔"; biliLink.SetBounds(272, 433, 112, 24);
             biliLink.LinkClicked += delegate { OpenUrl("https://space.bilibili.com/456339208"); };
             Controls.Add(biliLink);
             LinkLabel githubLink = new LinkLabel();
-            githubLink.Text = "GitHub 反馈"; githubLink.SetBounds(395, 318, 115, 24);
+            githubLink.Text = "GitHub 反馈"; githubLink.SetBounds(400, 433, 110, 24);
             githubLink.LinkClicked += delegate { OpenUrl("https://github.com/StarLorentz/TouhouSpeedController/issues"); };
             Controls.Add(githubLink);
 
@@ -387,6 +406,41 @@ namespace TouhouSpeedController
             if (backend == null) { SetStatus("变速后端仍在启动，请稍候。", true); return; }
             try { backend.Restore(); fpsBox.Value = 60; SetStatus("已恢复 60 帧（1 倍速）。", false); }
             catch (Exception ex) { SetStatus("恢复失败：" + ex.Message, true); }
+        }
+
+        private void ResetPracticePreview()
+        {
+            practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
+            practiceSupport.ForeColor = SystemColors.ControlText;
+            practiceValues.Text = "残机：—　Bomb：—　Bomb碎片：—　Power：—";
+        }
+
+        private void ReadPracticeClicked(object sender, EventArgs e)
+        {
+            GameProcess game = processBox.SelectedItem as GameProcess;
+            if (game == null)
+            {
+                SetStatus("请先启动 TH16 并点击“刷新”。", true);
+                return;
+            }
+
+            try
+            {
+                PracticeSnapshot snapshot = PracticeMemoryReader.ReadTh16(game.Process);
+                practiceSupport.Text = "支持状态：已识别 " + snapshot.ProfileId;
+                practiceSupport.ForeColor = Color.DarkGreen;
+                practiceValues.Text = String.Format(
+                    "残机：{0}　Bomb：{1}　Bomb碎片：{2}　Power：{3:0.00}",
+                    snapshot.Lives, snapshot.Bombs, snapshot.BombFragments, snapshot.Power / 100m);
+                SetStatus("TH16 当前资源读取成功（只读，没有修改游戏）。", false);
+            }
+            catch (Exception ex)
+            {
+                practiceSupport.Text = "支持状态：当前进程或版本不受支持";
+                practiceSupport.ForeColor = Color.DarkRed;
+                practiceValues.Text = "残机：—　Bomb：—　Bomb碎片：—　Power：—";
+                SetStatus("读取失败：" + ex.Message, true);
+            }
         }
 
         private void SetStatus(string text, bool error)
