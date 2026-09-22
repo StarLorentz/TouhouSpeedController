@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "game": "TH16",
+  "status": "fingerprint-only",
+  "profiles": [
+    {
+      "id": "th16-local-japanese",
+      "fileName": "th16.exe",
+      "sha256": "C11776019F083978E66027E7394DAFB1FB9543AFCA986F28049A49417E341929",
+      "architecture": "x86",
+      "origin": "Observed on the development machine",
+      "memoryWritesEnabled": false
+    },
+    {
+      "id": "th16-local-chinese-static-patch",
+      "fileName": "th16c.exe",
+      "sha256": "099BF0EDEEF663C1001C6782D7C6DE2AA22727526F314A98527C08DD99F06BC0",
+      "architecture": "x86",
+      "origin": "Observed on the development machine",
+      "memoryWritesEnabled": false
+    }
+  ]
+}
