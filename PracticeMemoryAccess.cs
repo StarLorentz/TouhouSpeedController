@@ -80,7 +80,7 @@ namespace TouhouSpeedController
             finally { CloseHandle(handle); }
         }
 
-        public static PracticeSnapshot WriteTh16(Process process, int lives, int bombs, int bombFragments, int power)
+        public static PracticeSnapshot WriteTh16(Process process, int? lives, int? bombs, int? bombFragments, int? power)
         {
             ValidateRequestedValues(lives, bombs, bombFragments, power);
 
@@ -103,24 +103,26 @@ namespace TouhouSpeedController
 
                 try
                 {
-                    WriteInt32(handle, moduleBase + Th16LivesRva, lives);
-                    WriteInt32(handle, moduleBase + Th16BombsRva, bombs);
-                    WriteInt32(handle, moduleBase + Th16BombFragmentsRva, bombFragments);
-                    WriteInt32(handle, moduleBase + Th16PowerRva, power);
+                    if (lives.HasValue) WriteInt32(handle, moduleBase + Th16LivesRva, lives.Value);
+                    if (bombs.HasValue) WriteInt32(handle, moduleBase + Th16BombsRva, bombs.Value);
+                    if (bombFragments.HasValue) WriteInt32(handle, moduleBase + Th16BombFragmentsRva, bombFragments.Value);
+                    if (power.HasValue) WriteInt32(handle, moduleBase + Th16PowerRva, power.Value);
                 }
                 catch
                 {
                     // Best-effort rollback if any individual write fails.
-                    TryWriteInt32(handle, moduleBase + Th16LivesRva, before.Lives);
-                    TryWriteInt32(handle, moduleBase + Th16BombsRva, before.Bombs);
-                    TryWriteInt32(handle, moduleBase + Th16BombFragmentsRva, before.BombFragments);
-                    TryWriteInt32(handle, moduleBase + Th16PowerRva, before.Power);
+                    if (lives.HasValue) TryWriteInt32(handle, moduleBase + Th16LivesRva, before.Lives);
+                    if (bombs.HasValue) TryWriteInt32(handle, moduleBase + Th16BombsRva, before.Bombs);
+                    if (bombFragments.HasValue) TryWriteInt32(handle, moduleBase + Th16BombFragmentsRva, before.BombFragments);
+                    if (power.HasValue) TryWriteInt32(handle, moduleBase + Th16PowerRva, before.Power);
                     throw;
                 }
 
                 PracticeSnapshot after = ReadSnapshot(handle, moduleBase, profileId, sha256);
-                if (after.Lives != lives || after.Bombs != bombs ||
-                    after.BombFragments != bombFragments || after.Power != power)
+                if ((lives.HasValue && after.Lives != lives.Value) ||
+                    (bombs.HasValue && after.Bombs != bombs.Value) ||
+                    (bombFragments.HasValue && after.BombFragments != bombFragments.Value) ||
+                    (power.HasValue && after.Power != power.Value))
                     throw new IOException("写入后的回读校验不一致，游戏可能正在切换场景；请重新读取后再试。");
                 return after;
             }
@@ -179,12 +181,14 @@ namespace TouhouSpeedController
             try { WriteInt32(handle, address, value); } catch { }
         }
 
-        private static void ValidateRequestedValues(int lives, int bombs, int bombFragments, int power)
+        private static void ValidateRequestedValues(int? lives, int? bombs, int? bombFragments, int? power)
         {
-            if (lives < 0 || lives > 8) throw new ArgumentOutOfRangeException("lives", "残机必须在 0–8 之间。");
-            if (bombs < 0 || bombs > 8) throw new ArgumentOutOfRangeException("bombs", "Bomb 必须在 0–8 之间。");
-            if (bombFragments < 0 || bombFragments > 4) throw new ArgumentOutOfRangeException("bombFragments", "Bomb 碎片必须在 0–4 之间。");
-            if (power < 100 || power > 400) throw new ArgumentOutOfRangeException("power", "Power 必须在 1.00–4.00 之间。");
+            if (!lives.HasValue && !bombs.HasValue && !bombFragments.HasValue && !power.HasValue)
+                throw new ArgumentException("至少要选择一项资源进行修改。");
+            if (lives.HasValue && (lives.Value < 0 || lives.Value > 8)) throw new ArgumentOutOfRangeException("lives", "残机必须在 0–8 之间。");
+            if (bombs.HasValue && (bombs.Value < 0 || bombs.Value > 8)) throw new ArgumentOutOfRangeException("bombs", "Bomb 必须在 0–8 之间。");
+            if (bombFragments.HasValue && (bombFragments.Value < 0 || bombFragments.Value > 4)) throw new ArgumentOutOfRangeException("bombFragments", "Bomb 碎片必须在 0–4 之间。");
+            if (power.HasValue && (power.Value < 100 || power.Value > 400)) throw new ArgumentOutOfRangeException("power", "Power 必须在 1.00–4.00 之间。");
         }
 
         private static void Validate(PracticeSnapshot snapshot)

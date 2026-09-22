@@ -192,7 +192,11 @@ namespace TouhouSpeedController
         private readonly NumericUpDown practiceBombFragments = new NumericUpDown();
         private readonly NumericUpDown practicePower = new NumericUpDown();
         private readonly Button readPractice = new Button();
-        private readonly Button applyPractice = new Button();
+        private readonly Button applyPracticeAll = new Button();
+        private readonly Button applyPracticeLives = new Button();
+        private readonly Button applyPracticeBombs = new Button();
+        private readonly Button applyPracticeBombFragments = new Button();
+        private readonly Button applyPracticePower = new Button();
         private SpeedBackend backend;
         private volatile bool closing;
 
@@ -200,7 +204,7 @@ namespace TouhouSpeedController
         {
             Text = "东方变速器";
             Font = new Font("Microsoft YaHei UI", 10F);
-            ClientSize = new Size(540, 510);
+            ClientSize = new Size(540, 548);
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
@@ -239,7 +243,7 @@ namespace TouhouSpeedController
 
             GroupBox practiceGroup = new GroupBox();
             practiceGroup.Text = "练习功能（TH16 日文版）";
-            practiceGroup.SetBounds(24, 248, 486, 134);
+            practiceGroup.SetBounds(24, 248, 486, 172);
             practiceSupport.SetBounds(14, 24, 450, 25);
             practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
             practiceGroup.Controls.Add(practiceSupport);
@@ -247,43 +251,54 @@ namespace TouhouSpeedController
             practiceGroup.Controls.Add(NewLabel("残机", 14, 57, 38, 24, 9F, false));
             ConfigurePracticeNumber(practiceLives, 52, 54, 48, 0, 8, 0, 1);
             practiceGroup.Controls.Add(practiceLives);
-            practiceGroup.Controls.Add(NewLabel("Bomb", 108, 57, 46, 24, 9F, false));
-            ConfigurePracticeNumber(practiceBombs, 154, 54, 48, 0, 8, 0, 1);
+            ConfigurePracticeApplyButton(applyPracticeLives, "应用", 106, 53, delegate { ApplyPracticeFields(true, false, false, false); });
+            practiceGroup.Controls.Add(applyPracticeLives);
+
+            practiceGroup.Controls.Add(NewLabel("Bomb", 204, 57, 46, 24, 9F, false));
+            ConfigurePracticeNumber(practiceBombs, 250, 54, 48, 0, 8, 0, 1);
             practiceGroup.Controls.Add(practiceBombs);
-            practiceGroup.Controls.Add(NewLabel("碎片", 210, 57, 38, 24, 9F, false));
-            ConfigurePracticeNumber(practiceBombFragments, 248, 54, 48, 0, 4, 0, 1);
+            ConfigurePracticeApplyButton(applyPracticeBombs, "应用", 304, 53, delegate { ApplyPracticeFields(false, true, false, false); });
+            practiceGroup.Controls.Add(applyPracticeBombs);
+
+            practiceGroup.Controls.Add(NewLabel("碎片", 14, 94, 38, 24, 9F, false));
+            ConfigurePracticeNumber(practiceBombFragments, 52, 91, 48, 0, 4, 0, 1);
             practiceGroup.Controls.Add(practiceBombFragments);
-            practiceGroup.Controls.Add(NewLabel("Power", 306, 57, 48, 24, 9F, false));
-            ConfigurePracticeNumber(practicePower, 354, 54, 76, 0, 4, 2, 0.01m);
+            ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 106, 90, delegate { ApplyPracticeFields(false, false, true, false); });
+            practiceGroup.Controls.Add(applyPracticeBombFragments);
+
+            practiceGroup.Controls.Add(NewLabel("Power", 204, 94, 48, 24, 9F, false));
+            ConfigurePracticeNumber(practicePower, 250, 91, 76, 0, 4, 2, 0.01m);
             practiceGroup.Controls.Add(practicePower);
+            ConfigurePracticeApplyButton(applyPracticePower, "应用", 332, 90, delegate { ApplyPracticeFields(false, false, false, true); });
+            practiceGroup.Controls.Add(applyPracticePower);
 
             readPractice.Text = "读取当前值";
-            readPractice.SetBounds(260, 92, 100, 30);
+            readPractice.SetBounds(260, 129, 100, 30);
             readPractice.Click += ReadPracticeClicked;
             practiceGroup.Controls.Add(readPractice);
-            applyPractice.Text = "应用数值";
-            applyPractice.SetBounds(370, 92, 100, 30);
-            applyPractice.Click += ApplyPracticeClicked;
-            practiceGroup.Controls.Add(applyPractice);
+            applyPracticeAll.Text = "全部应用";
+            applyPracticeAll.SetBounds(370, 129, 100, 30);
+            applyPracticeAll.Click += delegate { ApplyPracticeFields(true, true, true, true); };
+            practiceGroup.Controls.Add(applyPracticeAll);
             SetPracticeInputsEnabled(false);
             Controls.Add(practiceGroup);
             processBox.SelectedIndexChanged += delegate { ResetPracticePreview(); };
 
-            status.SetBounds(24, 395, 486, 54);
+            status.SetBounds(24, 433, 486, 54);
             status.BorderStyle = BorderStyle.FixedSingle;
             status.Padding = new Padding(8);
             status.Text = "正在启动变速后端……";
             Controls.Add(status);
 
-            Label version = NewLabel("v0.1.1 · 开发分支 · 非官方个人工具", 24, 468, 240, 24, 9F, false);
+            Label version = NewLabel("v0.1.1 · 开发分支 · 非官方个人工具", 24, 506, 240, 24, 9F, false);
             version.ForeColor = Color.DimGray;
             Controls.Add(version);
             LinkLabel biliLink = new LinkLabel();
-            biliLink.Text = "B站：斯塔罗尔"; biliLink.SetBounds(272, 468, 112, 24);
+            biliLink.Text = "B站：斯塔罗尔"; biliLink.SetBounds(272, 506, 112, 24);
             biliLink.LinkClicked += delegate { OpenUrl("https://space.bilibili.com/456339208"); };
             Controls.Add(biliLink);
             LinkLabel githubLink = new LinkLabel();
-            githubLink.Text = "GitHub 反馈"; githubLink.SetBounds(400, 468, 110, 24);
+            githubLink.Text = "GitHub 反馈"; githubLink.SetBounds(400, 506, 110, 24);
             githubLink.LinkClicked += delegate { OpenUrl("https://github.com/StarLorentz/TouhouSpeedController/issues"); };
             Controls.Add(githubLink);
 
@@ -472,7 +487,7 @@ namespace TouhouSpeedController
             }
         }
 
-        private void ApplyPracticeClicked(object sender, EventArgs e)
+        private void ApplyPracticeFields(bool changeLives, bool changeBombs, bool changeBombFragments, bool changePower)
         {
             GameProcess game = processBox.SelectedItem as GameProcess;
             if (game == null) { SetStatus("请先选择 TH16 日文版。", true); return; }
@@ -481,17 +496,23 @@ namespace TouhouSpeedController
             {
                 PracticeSnapshot snapshot = PracticeMemoryAccess.WriteTh16(
                     game.Process,
-                    Decimal.ToInt32(practiceLives.Value),
-                    Decimal.ToInt32(practiceBombs.Value),
-                    Decimal.ToInt32(practiceBombFragments.Value),
-                    Decimal.ToInt32(practicePower.Value * 100m));
+                    changeLives ? (int?)Decimal.ToInt32(practiceLives.Value) : null,
+                    changeBombs ? (int?)Decimal.ToInt32(practiceBombs.Value) : null,
+                    changeBombFragments ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null,
+                    changePower ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null);
                 practiceLives.Value = snapshot.Lives;
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;
                 practicePower.Value = snapshot.Power / 100m;
-                SetStatus("TH16 资源已应用并回读验证成功。", false);
+                string hudNote = (changeLives || changeBombs) ? " 残机/Bomb 的 HUD 可能在下次消耗或场景刷新后更新。" : String.Empty;
+                SetStatus("所选资源已应用并回读验证成功。" + hudNote, false);
             }
             catch (Exception ex) { SetStatus("应用失败：" + ex.Message, true); }
+        }
+
+        private static void ConfigurePracticeApplyButton(Button button, string text, int x, int y, EventHandler handler)
+        {
+            button.Text = text; button.SetBounds(x, y, 62, 28); button.Click += handler;
         }
 
         private static void ConfigurePracticeNumber(NumericUpDown box, int x, int y, int width,
@@ -508,7 +529,11 @@ namespace TouhouSpeedController
             practiceBombs.Enabled = enabled;
             practiceBombFragments.Enabled = enabled;
             practicePower.Enabled = enabled;
-            applyPractice.Enabled = enabled;
+            applyPracticeLives.Enabled = enabled;
+            applyPracticeBombs.Enabled = enabled;
+            applyPracticeBombFragments.Enabled = enabled;
+            applyPracticePower.Enabled = enabled;
+            applyPracticeAll.Enabled = enabled;
         }
 
         private void SetStatus(string text, bool error)
