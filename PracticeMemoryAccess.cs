@@ -1,8 +1,9 @@
-// 东方变速器 - TH16 read-only practice data preview
+// 东方变速器 - version-gated practice resource access
 // Copyright (C) 2026 StarLorentz
 // Licensed under GNU GPL v3.0. See LICENSE for details.
 //
-// TH16 resource addresses were adapted from thprac/thprac/src/thprac/thprac_th16.cpp
+// TH15/TH16 resource addresses were adapted from thprac/thprac/src/thprac/thprac_th15.cpp
+// and thprac/thprac/src/thprac/thprac_th16.cpp
 // at commit 585fae1aad4b720f350655a44e3f2ec7fc0dfa25.
 // thprac copyright (c) 2022 Ack, licensed under the MIT License.
 // See THIRD_PARTY_NOTICES.md for the complete notice.
@@ -21,6 +22,7 @@ namespace TouhouSpeedController
         public string ProfileId;
         public string Sha256;
         public int Lives;
+        public int LifeFragments;
         public int Bombs;
         public int BombFragments;
         public int Power;
@@ -40,8 +42,16 @@ namespace TouhouSpeedController
         private const long Th16BombFragmentsRva = 0x000A5804;
         private const long Th16PowerRva = 0x000A57E4;
 
+        private const long Th15LivesRva = 0x000E7450;
+        private const long Th15LifeFragmentsRva = 0x000E7454;
+        private const long Th15BombsRva = 0x000E745C;
+        private const long Th15BombFragmentsRva = 0x000E7460;
+        private const long Th15PowerRva = 0x000E7440;
+
         private const string Th16JapaneseSha256 = "C11776019F083978E66027E7394DAFB1FB9543AFCA986F28049A49417E341929";
         private const string Th16ChineseSha256 = "099BF0EDEEF663C1001C6782D7C6DE2AA22727526F314A98527C08DD99F06BC0";
+        private const string Th15JapaneseSha256 = "67A642357C8777089F468AAB9C7A0AE346EBDB62849D842A7B7B18D1E6910364";
+        private const string Th15ChineseSha256 = "9F5DEF1F7B1D7F30FE8CFDCC77CF601DE85ADD8C3FF62C84A48DE0DA4E25F69D";
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr OpenProcess(int desiredAccess, bool inheritHandle, int processId);
@@ -54,6 +64,41 @@ namespace TouhouSpeedController
 
         [DllImport("kernel32.dll")]
         private static extern bool CloseHandle(IntPtr handle);
+
+        public static PracticeSnapshot ReadTh15(Process process)
+        {
+            if (process == null) throw new ArgumentNullException("process");
+            if (!process.ProcessName.StartsWith("th15", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("TH15 练习读取目前只支持日文版 th15.exe。");
+
+            string sha256 = ComputeSha256(process.MainModule.FileName);
+            if (String.Equals(sha256, Th15ChineseSha256, StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("已识别本机 TH15 汉化版，但尚未单独验证其内存布局。当前保持禁用。");
+            if (!String.Equals(sha256, Th15JapaneseSha256, StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("TH15 EXE 哈希不在已验证列表中，已拒绝读取。SHA-256：" + sha256);
+            if (!String.Equals(process.ProcessName, "th15", StringComparison.OrdinalIgnoreCase))
+                throw new NotSupportedException("此 TH15 进程名称尚未验证，当前只读取日文版 th15.exe。");
+
+            long moduleBase = process.MainModule.BaseAddress.ToInt64();
+            IntPtr handle = OpenProcess(ProcessVmRead | ProcessQueryLimitedInformation, false, process.Id);
+            if (handle == IntPtr.Zero)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "无法以只读方式打开 TH15");
+
+            try
+            {
+                PracticeSnapshot snapshot = new PracticeSnapshot();
+                snapshot.ProfileId = "TH15 日文版（本机已识别版本）";
+                snapshot.Sha256 = sha256;
+                snapshot.Lives = ReadInt32(handle, moduleBase + Th15LivesRva);
+                snapshot.LifeFragments = ReadInt32(handle, moduleBase + Th15LifeFragmentsRva);
+                snapshot.Bombs = ReadInt32(handle, moduleBase + Th15BombsRva);
+                snapshot.BombFragments = ReadInt32(handle, moduleBase + Th15BombFragmentsRva);
+                snapshot.Power = ReadInt32(handle, moduleBase + Th15PowerRva);
+                Validate(snapshot);
+                return snapshot;
+            }
+            finally { CloseHandle(handle); }
+        }
 
         public static PracticeSnapshot ReadTh16(Process process)
         {
@@ -202,6 +247,7 @@ namespace TouhouSpeedController
             // Broad bounds also allow title-screen/default values while rejecting
             // obviously wrong addresses. The UI remains read-only in this stage.
             if (snapshot.Lives < 0 || snapshot.Lives > 99 ||
+                snapshot.LifeFragments < 0 || snapshot.LifeFragments > 99 ||
                 snapshot.Bombs < 0 || snapshot.Bombs > 99 ||
                 snapshot.BombFragments < 0 || snapshot.BombFragments > 99 ||
                 snapshot.Power < 0 || snapshot.Power > 1000)

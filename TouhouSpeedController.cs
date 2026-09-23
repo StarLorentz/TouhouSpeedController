@@ -248,10 +248,10 @@ namespace TouhouSpeedController
             Controls.Add(apply); Controls.Add(restore);
 
             GroupBox practiceGroup = new GroupBox();
-            practiceGroup.Text = "练习功能（TH16 日文版）";
+            practiceGroup.Text = "练习功能（TH15 只读 / TH16 日文版）";
             practiceGroup.SetBounds(24, 248, 486, 172);
             practiceSupport.SetBounds(14, 24, 450, 25);
-            practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
+            practiceSupport.Text = "支持状态：选择 TH15 或 TH16 后读取";
             practiceGroup.Controls.Add(practiceSupport);
 
             practiceGroup.Controls.Add(NewLabel("残机", 14, 57, 42, 24, 9F, false));
@@ -483,7 +483,7 @@ namespace TouhouSpeedController
                 MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
                     "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-            practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
+            practiceSupport.Text = "支持状态：选择 TH15 或 TH16 后读取";
             practiceSupport.ForeColor = SystemColors.ControlText;
             practiceLives.Value = 0;
             practiceBombs.Value = 0;
@@ -497,15 +497,25 @@ namespace TouhouSpeedController
             GameProcess game = processBox.SelectedItem as GameProcess;
             if (game == null)
             {
-                SetStatus("请先启动 TH16 并点击“刷新”。", true);
+                SetStatus("请先启动 TH15 或 TH16 并点击“刷新”。", true);
                 return;
             }
 
             try
             {
-                PracticeSnapshot snapshot = PracticeMemoryAccess.ReadTh16(game.Process);
+                bool th15 = game.Process.ProcessName.StartsWith("th15", StringComparison.OrdinalIgnoreCase);
+                PracticeSnapshot snapshot = th15
+                    ? PracticeMemoryAccess.ReadTh15(game.Process)
+                    : PracticeMemoryAccess.ReadTh16(game.Process);
                 practiceSupport.Text = "支持状态：已识别 " + snapshot.ProfileId;
                 practiceSupport.ForeColor = Color.DarkGreen;
+                if (th15)
+                {
+                    SetPracticeInputsEnabled(false);
+                    SetStatus(String.Format("TH15 只读｜残机 {0}（碎片 {1}） Bomb {2}（碎片 {3}） Power {4:0.00}。请在关卡内核对。",
+                        snapshot.Lives, snapshot.LifeFragments, snapshot.Bombs, snapshot.BombFragments, snapshot.Power / 100m), false);
+                    return;
+                }
                 practiceLives.Value = snapshot.Lives;
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;
