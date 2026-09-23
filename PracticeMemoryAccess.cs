@@ -26,6 +26,7 @@ namespace TouhouSpeedController
         public int Bombs;
         public int BombFragments;
         public int Power;
+        public string GameCode;
     }
 
     internal static class PracticeMemoryAccess
@@ -51,7 +52,27 @@ namespace TouhouSpeedController
         private const string Th16JapaneseSha256 = "C11776019F083978E66027E7394DAFB1FB9543AFCA986F28049A49417E341929";
         private const string Th16ChineseSha256 = "099BF0EDEEF663C1001C6782D7C6DE2AA22727526F314A98527C08DD99F06BC0";
         private const string Th15JapaneseSha256 = "67A642357C8777089F468AAB9C7A0AE346EBDB62849D842A7B7B18D1E6910364";
-        private const string Th15ChineseSha256 = "9F5DEF1F7B1D7F30FE8CFDCC77CF601DE85ADD8C3FF62C84A48DE0DA4E25F69D";
+
+        private sealed class DirectProfile
+        {
+            public string GameCode;
+            public string Sha256;
+            public long LivesRva;
+            public long LifeFragmentsRva;
+            public long BombsRva;
+            public long BombFragmentsRva;
+            public long PowerRva;
+        }
+
+        private static readonly DirectProfile[] DirectProfiles = {
+            new DirectProfile { GameCode = "TH14", Sha256 = "F08E885E28D2E0FC8C579E88034DD7DE8F2A648D8F08CE781CF08EADC9FFE353",
+                LivesRva = 0xF5864, LifeFragmentsRva = 0xF5868, BombsRva = 0xF5870, BombFragmentsRva = 0xF5874, PowerRva = 0xF5858 },
+            new DirectProfile { GameCode = "TH15", Sha256 = Th15JapaneseSha256,
+                LivesRva = Th15LivesRva, LifeFragmentsRva = Th15LifeFragmentsRva, BombsRva = Th15BombsRva,
+                BombFragmentsRva = Th15BombFragmentsRva, PowerRva = Th15PowerRva },
+            new DirectProfile { GameCode = "TH18", Sha256 = "5AEB74B19939A29A8CF06E4FE7777AAF9139E93478507E039F43318171020E9F",
+                LivesRva = 0xCCD48, LifeFragmentsRva = 0xCCD4C, BombsRva = 0xCCD58, BombFragmentsRva = 0xCCD5C, PowerRva = 0xCCD38 }
+        };
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr OpenProcess(int desiredAccess, bool inheritHandle, int processId);
@@ -65,37 +86,83 @@ namespace TouhouSpeedController
         [DllImport("kernel32.dll")]
         private static extern bool CloseHandle(IntPtr handle);
 
-        public static PracticeSnapshot ReadTh15(Process process)
+        private static DirectProfile IdentifyDirectProfile(Process process, out string sha256)
         {
             if (process == null) throw new ArgumentNullException("process");
-            if (!process.ProcessName.StartsWith("th15", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException("TH15 练习读取目前只支持日文版 th15.exe。");
+            string name = process.ProcessName.ToLowerInvariant();
+            if (name != "th14" && name != "th15" && name != "th18")
+                throw new NotSupportedException("当前进程尚未接入基础资源修改。");
+            sha256 = ComputeSha256(process.MainModule.FileName);
+            foreach (DirectProfile profile in DirectProfiles)
+                if (name == profile.GameCode.ToLowerInvariant() &&
+                    String.Equals(sha256, profile.Sha256, StringComparison.OrdinalIgnoreCase))
+                    return profile;
+            throw new NotSupportedException("这个游戏 EXE 的资源位置尚未验证，已拒绝访问。SHA-256：" + sha256);
+        }
 
-            string sha256 = ComputeSha256(process.MainModule.FileName);
-            if (String.Equals(sha256, Th15ChineseSha256, StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException("已识别本机 TH15 汉化版，但尚未单独验证其内存布局。当前保持禁用。");
-            if (!String.Equals(sha256, Th15JapaneseSha256, StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException("TH15 EXE 哈希不在已验证列表中，已拒绝读取。SHA-256：" + sha256);
-            if (!String.Equals(process.ProcessName, "th15", StringComparison.OrdinalIgnoreCase))
-                throw new NotSupportedException("此 TH15 进程名称尚未验证，当前只读取日文版 th15.exe。");
+        private static PracticeSnapshot ReadDirectSnapshot(IntPtr handle, long moduleBase, DirectProfile profile, string sha256)
+        {
+            PracticeSnapshot snapshot = new PracticeSnapshot();
+            snapshot.ProfileId = profile.GameCode + " 日文版（本机已识别版本）";
+            snapshot.GameCode = profile.GameCode;
+            snapshot.Sha256 = sha256;
+            snapshot.Lives = ReadInt32(handle, moduleBase + profile.LivesRva);
+            snapshot.LifeFragments = ReadInt32(handle, moduleBase + profile.LifeFragmentsRva);
+            snapshot.Bombs = ReadInt32(handle, moduleBase + profile.BombsRva);
+            snapshot.BombFragments = ReadInt32(handle, moduleBase + profile.BombFragmentsRva);
+            snapshot.Power = ReadInt32(handle, moduleBase + profile.PowerRva);
+            Validate(snapshot);
+            return snapshot;
+        }
 
-            long moduleBase = process.MainModule.BaseAddress.ToInt64();
+        public static PracticeSnapshot ReadDirect(Process process)
+        {
+            string sha256;
+            DirectProfile profile = IdentifyDirectProfile(process, out sha256);
             IntPtr handle = OpenProcess(ProcessVmRead | ProcessQueryLimitedInformation, false, process.Id);
             if (handle == IntPtr.Zero)
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "无法以只读方式打开 TH15");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "无法读取游戏资源");
+            try { return ReadDirectSnapshot(handle, process.MainModule.BaseAddress.ToInt64(), profile, sha256); }
+            finally { CloseHandle(handle); }
+        }
 
+        public static PracticeSnapshot WriteDirect(Process process, int? lives, int? bombs, int? bombFragments, int? power)
+        {
+            ValidateRequestedValues(lives, bombs, bombFragments, power);
+            string sha256;
+            DirectProfile profile = IdentifyDirectProfile(process, out sha256);
+            long moduleBase = process.MainModule.BaseAddress.ToInt64();
+            IntPtr handle = OpenProcess(ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryLimitedInformation,
+                false, process.Id);
+            if (handle == IntPtr.Zero)
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "无法打开游戏资源");
             try
             {
-                PracticeSnapshot snapshot = new PracticeSnapshot();
-                snapshot.ProfileId = "TH15 日文版（本机已识别版本）";
-                snapshot.Sha256 = sha256;
-                snapshot.Lives = ReadInt32(handle, moduleBase + Th15LivesRva);
-                snapshot.LifeFragments = ReadInt32(handle, moduleBase + Th15LifeFragmentsRva);
-                snapshot.Bombs = ReadInt32(handle, moduleBase + Th15BombsRva);
-                snapshot.BombFragments = ReadInt32(handle, moduleBase + Th15BombFragmentsRva);
-                snapshot.Power = ReadInt32(handle, moduleBase + Th15PowerRva);
-                Validate(snapshot);
-                return snapshot;
+                PracticeSnapshot before = ReadDirectSnapshot(handle, moduleBase, profile, sha256);
+                if (before.Power < 100 || before.Power > 400)
+                    throw new InvalidOperationException("请进入实际关卡并重新读取后，再应用数值。");
+                try
+                {
+                    if (lives.HasValue) WriteInt32(handle, moduleBase + profile.LivesRva, lives.Value);
+                    if (bombs.HasValue) WriteInt32(handle, moduleBase + profile.BombsRva, bombs.Value);
+                    if (bombFragments.HasValue) WriteInt32(handle, moduleBase + profile.BombFragmentsRva, bombFragments.Value);
+                    if (power.HasValue) WriteInt32(handle, moduleBase + profile.PowerRva, power.Value);
+                    PracticeSnapshot after = ReadDirectSnapshot(handle, moduleBase, profile, sha256);
+                    if ((lives.HasValue && after.Lives != lives.Value) ||
+                        (bombs.HasValue && after.Bombs != bombs.Value) ||
+                        (bombFragments.HasValue && after.BombFragments != bombFragments.Value) ||
+                        (power.HasValue && after.Power != power.Value))
+                        throw new IOException("写入后回读不一致，请重新读取。");
+                    return after;
+                }
+                catch
+                {
+                    if (lives.HasValue) TryWriteInt32(handle, moduleBase + profile.LivesRva, before.Lives);
+                    if (bombs.HasValue) TryWriteInt32(handle, moduleBase + profile.BombsRva, before.Bombs);
+                    if (bombFragments.HasValue) TryWriteInt32(handle, moduleBase + profile.BombFragmentsRva, before.BombFragments);
+                    if (power.HasValue) TryWriteInt32(handle, moduleBase + profile.PowerRva, before.Power);
+                    throw;
+                }
             }
             finally { CloseHandle(handle); }
         }

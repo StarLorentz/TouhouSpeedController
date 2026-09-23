@@ -248,10 +248,10 @@ namespace TouhouSpeedController
             Controls.Add(apply); Controls.Add(restore);
 
             GroupBox practiceGroup = new GroupBox();
-            practiceGroup.Text = "练习功能（TH15 只读 / TH16 日文版）";
+            practiceGroup.Text = "练习功能（TH14/15/16/18 日文版）";
             practiceGroup.SetBounds(24, 248, 486, 172);
             practiceSupport.SetBounds(14, 24, 450, 25);
-            practiceSupport.Text = "支持状态：选择 TH15 或 TH16 后读取";
+            practiceSupport.Text = "支持状态：选中游戏后读取当前值";
             practiceGroup.Controls.Add(practiceSupport);
 
             practiceGroup.Controls.Add(NewLabel("残机", 14, 57, 42, 24, 9F, false));
@@ -483,7 +483,7 @@ namespace TouhouSpeedController
                 MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
                     "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-            practiceSupport.Text = "支持状态：选择 TH15 或 TH16 后读取";
+            practiceSupport.Text = "支持状态：选中游戏后读取当前值";
             practiceSupport.ForeColor = SystemColors.ControlText;
             practiceLives.Value = 0;
             practiceBombs.Value = 0;
@@ -497,34 +497,36 @@ namespace TouhouSpeedController
             GameProcess game = processBox.SelectedItem as GameProcess;
             if (game == null)
             {
-                SetStatus("请先启动 TH15 或 TH16 并点击“刷新”。", true);
+                SetStatus("请先启动游戏并点击“刷新”。", true);
                 return;
             }
 
             try
             {
-                bool th15 = game.Process.ProcessName.StartsWith("th15", StringComparison.OrdinalIgnoreCase);
-                PracticeSnapshot snapshot = th15
-                    ? PracticeMemoryAccess.ReadTh15(game.Process)
+                string name = game.Process.ProcessName.ToLowerInvariant();
+                bool direct = name == "th14" || name == "th15" || name == "th18";
+                PracticeSnapshot snapshot = direct
+                    ? PracticeMemoryAccess.ReadDirect(game.Process)
                     : PracticeMemoryAccess.ReadTh16(game.Process);
                 practiceSupport.Text = "支持状态：已识别 " + snapshot.ProfileId;
                 practiceSupport.ForeColor = Color.DarkGreen;
-                if (th15)
-                {
-                    SetPracticeInputsEnabled(false);
-                    SetStatus(String.Format("TH15 只读｜残机 {0}（碎片 {1}） Bomb {2}（碎片 {3}） Power {4:0.00}。请在关卡内核对。",
-                        snapshot.Lives, snapshot.LifeFragments, snapshot.Bombs, snapshot.BombFragments, snapshot.Power / 100m), false);
-                    return;
-                }
                 practiceLives.Value = snapshot.Lives;
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;
                 practicePower.Value = snapshot.Power / 100m;
                 bool inGame = snapshot.Power >= 100 && snapshot.Power <= 400;
                 SetPracticeInputsEnabled(inGame);
+                if (direct)
+                {
+                    infiniteLives.Enabled = false;
+                    infiniteBombs.Enabled = false;
+                    invincibility.Enabled = false;
+                }
                 SetStatus(inGame
-                    ? "TH16 当前资源读取成功，可以修改后点击“应用数值”。"
-                    : "TH16 版本已识别；请进入实际关卡后重新读取，再应用数值。", false);
+                    ? (direct
+                        ? String.Format("{0} 资源已读取（残机碎片 {1}）；可修改四项。游戏效果仍需实测。", snapshot.GameCode, snapshot.LifeFragments)
+                        : "TH16 当前资源读取成功，可以修改后点击“应用数值”。")
+                    : "版本已识别；请进入实际关卡后重新读取，再应用数值。", false);
             }
             catch (Exception ex)
             {
@@ -542,12 +544,14 @@ namespace TouhouSpeedController
 
             try
             {
-                PracticeSnapshot snapshot = PracticeMemoryAccess.WriteTh16(
-                    game.Process,
-                    changeLives ? (int?)Decimal.ToInt32(practiceLives.Value) : null,
-                    changeBombs ? (int?)Decimal.ToInt32(practiceBombs.Value) : null,
-                    changeBombFragments ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null,
-                    changePower ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null);
+                int? lives = changeLives ? (int?)Decimal.ToInt32(practiceLives.Value) : null;
+                int? bombs = changeBombs ? (int?)Decimal.ToInt32(practiceBombs.Value) : null;
+                int? fragments = changeBombFragments ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null;
+                int? power = changePower ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null;
+                string name = game.Process.ProcessName.ToLowerInvariant();
+                PracticeSnapshot snapshot = name == "th14" || name == "th15" || name == "th18"
+                    ? PracticeMemoryAccess.WriteDirect(game.Process, lives, bombs, fragments, power)
+                    : PracticeMemoryAccess.WriteTh16(game.Process, lives, bombs, fragments, power);
                 practiceLives.Value = snapshot.Lives;
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;

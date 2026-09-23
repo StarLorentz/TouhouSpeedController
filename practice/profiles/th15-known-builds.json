@@ -9,8 +9,8 @@
       "sha256": "67A642357C8777089F468AAB9C7A0AE346EBDB62849D842A7B7B18D1E6910364",
       "architecture": "x86",
       "origin": "Observed on the development machine; resource addresses from thprac commit 585fae1aad4b720f350655a44e3f2ec7fc0dfa25",
-      "practiceSupport": "resource-read-only-awaiting-in-game-verification",
-      "memoryWritesEnabled": false
+      "practiceSupport": "resource-read-and-bounded-write-awaiting-in-game-verification",
+      "memoryWritesEnabled": true
     },
     {
       "id": "th15-local-chinese",

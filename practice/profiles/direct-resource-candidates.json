@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "status": "development-candidate-not-in-game-verified",
+  "source": "thprac commit 585fae1aad4b720f350655a44e3f2ec7fc0dfa25",
+  "profiles": [
+    {
+      "game": "TH14",
+      "fileName": "th14.exe",
+      "sha256": "F08E885E28D2E0FC8C579E88034DD7DE8F2A648D8F08CE781CF08EADC9FFE353",
+      "architecture": "x86",
+      "resourceReadEnabled": true,
+      "boundedResourceWriteEnabled": true,
+      "inGameEffectVerified": false
+    },
+    {
+      "game": "TH15",
+      "fileName": "th15.exe",
+      "sha256": "67A642357C8777089F468AAB9C7A0AE346EBDB62849D842A7B7B18D1E6910364",
+      "architecture": "x86",
+      "resourceReadEnabled": true,
+      "boundedResourceWriteEnabled": true,
+      "inGameEffectVerified": false
+    },
+    {
+      "game": "TH18",
+      "fileName": "th18.exe",
+      "sha256": "5AEB74B19939A29A8CF06E4FE7777AAF9139E93478507E039F43318171020E9F",
+      "architecture": "x86",
+      "resourceReadEnabled": true,
+      "boundedResourceWriteEnabled": true,
+      "inGameEffectVerified": false
+    }
+  ]
+}
