@@ -18,6 +18,7 @@ def main():
     offset = pe.get_offset_from_rva(args.start - base)
     data = pe.__data__[offset:offset + args.end - args.start]
     md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    md.skipdata = True
     for instruction in md.disasm(data, args.start):
         print("%08X %-9s %s" % (instruction.address, instruction.mnemonic, instruction.op_str))
 

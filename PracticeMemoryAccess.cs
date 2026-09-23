@@ -106,6 +106,14 @@ namespace TouhouSpeedController
             throw new NotSupportedException("这个游戏 EXE 的资源位置尚未验证，已拒绝访问。SHA-256：" + sha256);
         }
 
+        internal static void VerifySupportedTh20(Process process)
+        {
+            string sha256;
+            DirectProfile profile = IdentifyDirectProfile(process, out sha256);
+            if (profile.GameCode != "TH20")
+                throw new NotSupportedException("TH20 无敌补丁不能用于其他作品。");
+        }
+
         private static PracticeSnapshot ReadDirectSnapshot(IntPtr handle, long moduleBase, DirectProfile profile, string sha256)
         {
             PracticeSnapshot snapshot = new PracticeSnapshot();

@@ -358,7 +358,7 @@ namespace TouhouSpeedController
                 try { DisableInvincibility(); }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
+                    MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出相应游戏以恢复原始代码。",
                         "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 if (backend != null) backend.Dispose();
@@ -529,7 +529,7 @@ namespace TouhouSpeedController
             catch (Exception ex)
             {
                 SetStatus("关闭无敌失败：" + ex.Message, true);
-                MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
+                MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出相应游戏以恢复原始代码。",
                     "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             practiceSupport.Text = "支持状态：选中游戏后读取当前值";
@@ -569,7 +569,7 @@ namespace TouhouSpeedController
                 {
                     infiniteLives.Enabled = false;
                     infiniteBombs.Enabled = false;
-                    invincibility.Enabled = false;
+                    invincibility.Enabled = name == "th20" && inGame;
                 }
                 SetStatus(inGame
                     ? (direct
@@ -632,8 +632,9 @@ namespace TouhouSpeedController
             {
                 try
                 {
+                    string code = activeInvincibility == null ? "游戏" : activeInvincibility.GameCode;
                     DisableInvincibility();
-                    SetStatus("无敌已关闭，TH16 受击代码已恢复。", false);
+                    SetStatus("无敌已关闭，" + code + " 受击代码已恢复。", false);
                 }
                 catch (Exception ex)
                 {
@@ -641,7 +642,7 @@ namespace TouhouSpeedController
                     invincibility.Checked = true;
                     updatingInfiniteChecks = false;
                     SetStatus("关闭无敌失败：" + ex.Message, true);
-                    MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
+                    MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出相应游戏以恢复原始代码。",
                         "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 return;
@@ -652,9 +653,9 @@ namespace TouhouSpeedController
             {
                 if (activeInvincibility != null)
                     throw new InvalidOperationException("上一个游戏的无敌补丁尚未恢复。");
-                if (game == null) throw new InvalidOperationException("请先选择 TH16 日文版。");
+                if (game == null) throw new InvalidOperationException("请先选择已识别的 TH16 或 TH20。");
                 activeInvincibility = InvincibilityPatch.Enable(game.Process);
-                SetStatus("TH16 无敌已开启（实验功能）；练习录像可能不同步。", false);
+                SetStatus(activeInvincibility.GameCode + " 无敌已开启（实验功能）；练习录像可能不同步。", false);
             }
             catch (Exception ex)
             {
