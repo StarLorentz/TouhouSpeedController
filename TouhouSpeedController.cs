@@ -192,6 +192,9 @@ namespace TouhouSpeedController
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool UnregisterHotKey(IntPtr window, int id);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetForegroundWindow();
+
         private readonly ComboBox processBox = new ComboBox();
         private readonly NumericUpDown fpsBox = new NumericUpDown();
         private readonly Label status = new Label();
@@ -239,7 +242,7 @@ namespace TouhouSpeedController
             }
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             Label heading = NewLabel("东方变速器（TH06–TH20）", 105, 18, 405, 30, 15F, true);
-            Label intro = NewLabel("输入任意帧率，60 帧为原速。Ctrl+Shift+C 呼出。", 107, 54, 403, 25, 9.5F, false);
+            Label intro = NewLabel("输入任意帧率，60 帧为原速。Ctrl+Shift+C 切换窗口。", 107, 54, 403, 25, 9.5F, false);
             Controls.Add(heading); Controls.Add(intro);
 
             Controls.Add(NewLabel("游戏进程", 24, 97, 85, 28, 10F, false));
@@ -366,6 +369,12 @@ namespace TouhouSpeedController
         {
             if (message.Msg == WmHotkey && message.WParam.ToInt32() == FocusHotkeyId)
             {
+                if (WindowState != FormWindowState.Minimized && GetForegroundWindow() == Handle)
+                {
+                    TopMost = false;
+                    WindowState = FormWindowState.Minimized;
+                    return;
+                }
                 if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
                 Show();
                 TopMost = true;
