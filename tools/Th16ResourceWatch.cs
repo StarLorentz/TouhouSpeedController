@@ -78,7 +78,7 @@ internal static class Th16ResourceWatch
             {
                 using (StreamWriter writer = new StreamWriter(output, false, new System.Text.UTF8Encoding(false)))
                 {
-                    writer.WriteLine("time,pid,lives,bombs,bombFragments,power,shotPowerTier,bombActive,bombType");
+                    writer.WriteLine("time,pid,lives,bombs,bombFragments,power,shotPowerTier,firingPowerTier,bombActive,bombType");
                     string previous = null;
                     Stopwatch timer = Stopwatch.StartNew();
                     while (timer.Elapsed.TotalSeconds < seconds && !game.HasExited)
@@ -90,8 +90,14 @@ internal static class Th16ResourceWatch
                             int fragments = ReadInt32(handle, baseAddress + 0xA5804);
                             int power = ReadInt32(handle, baseAddress + 0xA57E4);
                             int playerPointer = ReadInt32(handle, baseAddress + 0xA6EF8);
-                            int shotPowerTier = playerPointer == 0 ? -1 :
-                                ReadInt32(handle, (long)(uint)playerPointer + 0x16698);
+                            int shotPowerTier = -1;
+                            int firingPowerTier = -1;
+                            if (playerPointer != 0)
+                            {
+                                long playerAddress = (long)(uint)playerPointer;
+                                shotPowerTier = ReadInt32(handle, playerAddress + 0x16698);
+                                firingPowerTier = ReadInt32(handle, playerAddress + 0x165F4);
+                            }
                             int bombPointer = ReadInt32(handle, baseAddress + 0xA6DA8);
                             int bombActive = -1;
                             int bombType = -1;
@@ -101,8 +107,9 @@ internal static class Th16ResourceWatch
                                 bombActive = ReadInt32(handle, bombAddress + 0x30);
                                 bombType = ReadInt32(handle, bombAddress + 0xD4);
                             }
-                            string state = String.Format("{0},{1},{2},{3},{4},{5},{6}",
-                                lives, bombs, fragments, power, shotPowerTier, bombActive, bombType);
+                            string state = String.Format("{0},{1},{2},{3},{4},{5},{6},{7}",
+                                lives, bombs, fragments, power, shotPowerTier, firingPowerTier,
+                                bombActive, bombType);
                             if (state != previous)
                             {
                                 string line = DateTime.Now.ToString("HH:mm:ss.fff") + "," + game.Id + "," + state;
