@@ -1,3 +1,5 @@
+param([string]$OutputDirectory)
+
 $ErrorActionPreference = 'Stop'
 
 $projectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -11,7 +13,11 @@ if (-not (Test-Path -LiteralPath $openSpeedyLicense)) {
     $openSpeedyLicense = Join-Path $workspaceDir 'work\OpenSpeedy\LICENSE'
 }
 $buildDir = Join-Path $projectDir 'build'
-$packageDir = Join-Path $buildDir '东方变速器'
+$packageDir = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    Join-Path $buildDir '东方变速器'
+} else {
+    [System.IO.Path]::GetFullPath($OutputDirectory)
+}
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 
 New-Item -ItemType Directory -Path $packageDir -Force | Out-Null

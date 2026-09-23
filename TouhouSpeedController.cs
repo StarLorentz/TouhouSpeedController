@@ -542,8 +542,7 @@ namespace TouhouSpeedController
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;
                 practicePower.Value = snapshot.Power / 100m;
-                string hudNote = (changeLives || changeBombs) ? " 残机/Bomb 的界面数字会稍后刷新。" : String.Empty;
-                SetStatus("所选资源已应用并校验成功。" + hudNote, false);
+                SetStatus("资源数值已写入并校验；游戏显示或攻击可能稍后才同步。", false);
             }
             catch (Exception ex) { SetStatus("应用失败：" + ex.Message, true); }
         }
