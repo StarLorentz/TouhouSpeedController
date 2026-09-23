@@ -5,7 +5,6 @@ Requires pefile and capstone; does not start or modify any game process.
 
 import argparse
 import struct
-import sys
 
 
 def main():
