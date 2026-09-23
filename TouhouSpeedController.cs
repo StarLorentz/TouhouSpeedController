@@ -270,10 +270,10 @@ namespace TouhouSpeedController
             ConfigureInfiniteCheckBox(infiniteBombs, 423, 54);
             practiceGroup.Controls.Add(infiniteBombs);
 
-            practiceGroup.Controls.Add(NewLabel("碎片", 14, 94, 42, 24, 9F, false));
-            ConfigurePracticeNumber(practiceBombFragments, 62, 91, 55, 0, 4, 0, 1);
+            practiceGroup.Controls.Add(NewLabel("Bomb碎片", 14, 94, 75, 24, 9F, false));
+            ConfigurePracticeNumber(practiceBombFragments, 92, 91, 55, 0, 4, 0, 1);
             practiceGroup.Controls.Add(practiceBombFragments);
-            ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 125, 90, delegate { ApplyPracticeFields(false, false, true, false); });
+            ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 155, 90, delegate { ApplyPracticeFields(false, false, true, false); });
             practiceGroup.Controls.Add(applyPracticeBombFragments);
 
             practiceGroup.Controls.Add(NewLabel("Power", 250, 94, 44, 24, 9F, false));
@@ -524,7 +524,7 @@ namespace TouhouSpeedController
                 }
                 SetStatus(inGame
                     ? (direct
-                        ? String.Format("{0} 资源已读取（残机碎片 {1}）；可修改四项。游戏效果仍需实测。", snapshot.GameCode, snapshot.LifeFragments)
+                        ? String.Format("{0} 资源已读取；可修改残机、Bomb、Bomb碎片和Power。攻击效果可能延迟。", snapshot.GameCode)
                         : "TH16 当前资源读取成功，可以修改后点击“应用数值”。")
                     : "版本已识别；请进入实际关卡后重新读取，再应用数值。", false);
             }

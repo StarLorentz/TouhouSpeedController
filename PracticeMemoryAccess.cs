@@ -2,8 +2,9 @@
 // Copyright (C) 2026 StarLorentz
 // Licensed under GNU GPL v3.0. See LICENSE for details.
 //
-// TH15/TH16 resource addresses were adapted from thprac/thprac/src/thprac/thprac_th15.cpp
-// and thprac/thprac/src/thprac/thprac_th16.cpp
+// Resource addresses were adapted from thprac/src/thprac/thprac_th14.cpp,
+// thprac_th15.cpp, thprac_th16.cpp, thprac_th17.cpp, thprac_th18.cpp,
+// and thprac_th20.cpp
 // at commit 585fae1aad4b720f350655a44e3f2ec7fc0dfa25.
 // thprac copyright (c) 2022 Ack, licensed under the MIT License.
 // See THIRD_PARTY_NOTICES.md for the complete notice.
@@ -22,7 +23,6 @@ namespace TouhouSpeedController
         public string ProfileId;
         public string Sha256;
         public int Lives;
-        public int LifeFragments;
         public int Bombs;
         public int BombFragments;
         public int Power;
@@ -44,7 +44,6 @@ namespace TouhouSpeedController
         private const long Th16PowerRva = 0x000A57E4;
 
         private const long Th15LivesRva = 0x000E7450;
-        private const long Th15LifeFragmentsRva = 0x000E7454;
         private const long Th15BombsRva = 0x000E745C;
         private const long Th15BombFragmentsRva = 0x000E7460;
         private const long Th15PowerRva = 0x000E7440;
@@ -58,7 +57,6 @@ namespace TouhouSpeedController
             public string GameCode;
             public string Sha256;
             public long LivesRva;
-            public long LifeFragmentsRva;
             public long BombsRva;
             public long BombFragmentsRva;
             public long PowerRva;
@@ -66,19 +64,19 @@ namespace TouhouSpeedController
 
         private static readonly DirectProfile[] DirectProfiles = {
             new DirectProfile { GameCode = "TH14", Sha256 = "F08E885E28D2E0FC8C579E88034DD7DE8F2A648D8F08CE781CF08EADC9FFE353",
-                LivesRva = 0xF5864, LifeFragmentsRva = 0xF5868, BombsRva = 0xF5870, BombFragmentsRva = 0xF5874, PowerRva = 0xF5858 },
+                LivesRva = 0xF5864, BombsRva = 0xF5870, BombFragmentsRva = 0xF5874, PowerRva = 0xF5858 },
             new DirectProfile { GameCode = "TH15", Sha256 = Th15JapaneseSha256,
-                LivesRva = Th15LivesRva, LifeFragmentsRva = Th15LifeFragmentsRva, BombsRva = Th15BombsRva,
+                LivesRva = Th15LivesRva, BombsRva = Th15BombsRva,
                 BombFragmentsRva = Th15BombFragmentsRva, PowerRva = Th15PowerRva },
             // TH17: GlobalsReplay starts at 0x4B59DC; offsets follow thprac_th17.cpp.
             new DirectProfile { GameCode = "TH17", Sha256 = "85CB011E2E43B316C8FA42A3C402565ECDF2F4379F3BAB66D86BCB7BEEF8255F",
-                LivesRva = 0xB5A40, LifeFragmentsRva = 0xB5A44, BombsRva = 0xB5A4C,
+                LivesRva = 0xB5A40, BombsRva = 0xB5A4C,
                 BombFragmentsRva = 0xB5A50, PowerRva = 0xB5A30 },
             new DirectProfile { GameCode = "TH18", Sha256 = "5AEB74B19939A29A8CF06E4FE7777AAF9139E93478507E039F43318171020E9F",
-                LivesRva = 0xCCD48, LifeFragmentsRva = 0xCCD4C, BombsRva = 0xCCD58, BombFragmentsRva = 0xCCD5C, PowerRva = 0xCCD38 },
+                LivesRva = 0xCCD48, BombsRva = 0xCCD58, BombFragmentsRva = 0xCCD5C, PowerRva = 0xCCD38 },
             // TH20: game side 0 is at RVA 0x1BA568; GlobalsSide begins at +0x88.
             new DirectProfile { GameCode = "TH20", Sha256 = "E6C4371E214C95DD4DBCAAF6818C79C5E89881270F65B62B8C3C965B65851E2D",
-                LivesRva = 0x1BA6A8, LifeFragmentsRva = 0x1BA6B0, BombsRva = 0x1BA6BC,
+                LivesRva = 0x1BA6A8, BombsRva = 0x1BA6BC,
                 BombFragmentsRva = 0x1BA6C0, PowerRva = 0x1BA620 }
         };
 
@@ -115,7 +113,6 @@ namespace TouhouSpeedController
             snapshot.GameCode = profile.GameCode;
             snapshot.Sha256 = sha256;
             snapshot.Lives = ReadInt32(handle, moduleBase + profile.LivesRva);
-            snapshot.LifeFragments = ReadInt32(handle, moduleBase + profile.LifeFragmentsRva);
             snapshot.Bombs = ReadInt32(handle, moduleBase + profile.BombsRva);
             snapshot.BombFragments = ReadInt32(handle, moduleBase + profile.BombFragmentsRva);
             snapshot.Power = ReadInt32(handle, moduleBase + profile.PowerRva);
@@ -322,7 +319,6 @@ namespace TouhouSpeedController
             // Broad bounds also allow title-screen/default values while rejecting
             // obviously wrong addresses. The UI remains read-only in this stage.
             if (snapshot.Lives < 0 || snapshot.Lives > 99 ||
-                snapshot.LifeFragments < 0 || snapshot.LifeFragments > 99 ||
                 snapshot.Bombs < 0 || snapshot.Bombs > 99 ||
                 snapshot.BombFragments < 0 || snapshot.BombFragments > 99 ||
                 snapshot.Power < 0 || snapshot.Power > 1000)
