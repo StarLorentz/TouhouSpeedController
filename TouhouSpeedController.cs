@@ -199,7 +199,9 @@ namespace TouhouSpeedController
         private readonly Button applyPracticePower = new Button();
         private readonly CheckBox infiniteLives = new CheckBox();
         private readonly CheckBox infiniteBombs = new CheckBox();
+        private readonly CheckBox invincibility = new CheckBox();
         private readonly System.Windows.Forms.Timer practiceFreezeTimer = new System.Windows.Forms.Timer();
+        private InvincibilityPatch activeInvincibility;
         private SpeedBackend backend;
         private volatile bool closing;
         private bool updatingInfiniteChecks;
@@ -280,6 +282,11 @@ namespace TouhouSpeedController
             ConfigurePracticeApplyButton(applyPracticePower, "应用", 365, 90, delegate { ApplyPracticeFields(false, false, false, true); });
             practiceGroup.Controls.Add(applyPracticePower);
 
+            invincibility.Text = "无敌（实验）";
+            invincibility.SetBounds(14, 130, 130, 27);
+            invincibility.CheckedChanged += InvincibilityChanged;
+            practiceGroup.Controls.Add(invincibility);
+
             readPractice.Text = "读取当前值";
             readPractice.SetBounds(260, 129, 100, 30);
             readPractice.Click += ReadPracticeClicked;
@@ -315,7 +322,18 @@ namespace TouhouSpeedController
             Controls.Add(githubLink);
 
             Shown += delegate { BeginInitializeBackend(); };
-            FormClosing += delegate { closing = true; practiceFreezeTimer.Stop(); if (backend != null) backend.Dispose(); };
+            FormClosing += delegate
+            {
+                closing = true;
+                practiceFreezeTimer.Stop();
+                try { DisableInvincibility(); }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
+                        "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                if (backend != null) backend.Dispose();
+            };
         }
 
         private Label NewLabel(string text, int x, int y, int w, int h, float size, bool bold)
@@ -458,6 +476,13 @@ namespace TouhouSpeedController
         private void ResetPracticePreview()
         {
             StopInfiniteResources();
+            try { DisableInvincibility(); }
+            catch (Exception ex)
+            {
+                SetStatus("关闭无敌失败：" + ex.Message, true);
+                MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
+                    "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
             practiceSupport.Text = "支持状态：选择 TH16 后点击“读取当前值”";
             practiceSupport.ForeColor = SystemColors.ControlText;
             practiceLives.Value = 0;
@@ -527,6 +552,58 @@ namespace TouhouSpeedController
         {
             box.Text = "无限"; box.Font = new Font(Font.FontFamily, 9F); box.SetBounds(x, y, 58, 27);
             box.CheckedChanged += InfiniteSelectionChanged;
+        }
+
+        private void InvincibilityChanged(object sender, EventArgs e)
+        {
+            if (updatingInfiniteChecks) return;
+            if (!invincibility.Checked)
+            {
+                try
+                {
+                    DisableInvincibility();
+                    SetStatus("无敌已关闭，TH16 受击代码已恢复。", false);
+                }
+                catch (Exception ex)
+                {
+                    updatingInfiniteChecks = true;
+                    invincibility.Checked = true;
+                    updatingInfiniteChecks = false;
+                    SetStatus("关闭无敌失败：" + ex.Message, true);
+                    MessageBox.Show("恢复无敌补丁失败：" + ex.Message + "\n请退出 TH16 以恢复原始代码。",
+                        "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+                return;
+            }
+
+            GameProcess game = processBox.SelectedItem as GameProcess;
+            try
+            {
+                if (activeInvincibility != null)
+                    throw new InvalidOperationException("上一个游戏的无敌补丁尚未恢复。");
+                if (game == null) throw new InvalidOperationException("请先选择 TH16 日文版。");
+                activeInvincibility = InvincibilityPatch.Enable(game.Process);
+                SetStatus("TH16 无敌已开启（实验功能）；练习录像可能不同步。", false);
+            }
+            catch (Exception ex)
+            {
+                updatingInfiniteChecks = true;
+                invincibility.Checked = false;
+                updatingInfiniteChecks = false;
+                SetStatus("开启无敌失败：" + ex.Message, true);
+            }
+        }
+
+        private void DisableInvincibility()
+        {
+            if (activeInvincibility != null)
+            {
+                activeInvincibility.Dispose();
+                activeInvincibility = null;
+            }
+            updatingInfiniteChecks = true;
+            invincibility.Checked = false;
+            updatingInfiniteChecks = false;
         }
 
         private void InfiniteSelectionChanged(object sender, EventArgs e)
@@ -622,6 +699,7 @@ namespace TouhouSpeedController
             applyPracticeAll.Enabled = enabled;
             infiniteLives.Enabled = enabled;
             infiniteBombs.Enabled = enabled;
+            invincibility.Enabled = enabled || activeInvincibility != null;
         }
 
         private void SetStatus(string text, bool error)

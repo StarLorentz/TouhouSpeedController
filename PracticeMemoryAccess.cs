@@ -129,6 +129,12 @@ namespace TouhouSpeedController
             finally { CloseHandle(handle); }
         }
 
+        internal static void VerifySupportedTh16(Process process)
+        {
+            string profileId;
+            IdentifySupportedTh16(process, out profileId);
+        }
+
         private static string IdentifySupportedTh16(Process process, out string profileId)
         {
             if (process == null) throw new ArgumentNullException("process");

@@ -9,7 +9,7 @@
       "sha256": "C11776019F083978E66027E7394DAFB1FB9543AFCA986F28049A49417E341929",
       "architecture": "x86",
       "origin": "Observed on the development machine",
-      "practiceSupport": "resource-edit-and-freeze-preview",
+      "practiceSupport": "resource-edit-freeze-and-experimental-invincibility",
       "memoryWritesEnabled": true
     },
     {
