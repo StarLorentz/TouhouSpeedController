@@ -180,6 +180,18 @@ namespace TouhouSpeedController
 
     internal sealed class MainForm : Form
     {
+        private const int FocusHotkeyId = 0x5453;
+        private const int WmHotkey = 0x0312;
+        private const uint ModControl = 0x0002;
+        private const uint ModShift = 0x0004;
+        private const uint ModNoRepeat = 0x4000;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool RegisterHotKey(IntPtr window, int id, uint modifiers, uint virtualKey);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterHotKey(IntPtr window, int id);
+
         private readonly ComboBox processBox = new ComboBox();
         private readonly NumericUpDown fpsBox = new NumericUpDown();
         private readonly Label status = new Label();
@@ -205,6 +217,7 @@ namespace TouhouSpeedController
         private SpeedBackend backend;
         private volatile bool closing;
         private bool updatingInfiniteChecks;
+        private bool focusHotkeyRegistered;
 
         public MainForm()
         {
@@ -226,7 +239,7 @@ namespace TouhouSpeedController
             }
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             Label heading = NewLabel("东方变速器（TH06–TH20）", 105, 18, 405, 30, 15F, true);
-            Label intro = NewLabel("输入任意帧率，60 帧为原速。", 107, 54, 403, 25, 9.5F, false);
+            Label intro = NewLabel("输入任意帧率，60 帧为原速。Ctrl+Shift+C 呼出。", 107, 54, 403, 25, 9.5F, false);
             Controls.Add(heading); Controls.Add(intro);
 
             Controls.Add(NewLabel("游戏进程", 24, 97, 85, 28, 10F, false));
@@ -270,10 +283,10 @@ namespace TouhouSpeedController
             ConfigureInfiniteCheckBox(infiniteBombs, 423, 54);
             practiceGroup.Controls.Add(infiniteBombs);
 
-            practiceGroup.Controls.Add(NewLabel("Bomb碎片", 14, 94, 75, 24, 9F, false));
-            ConfigurePracticeNumber(practiceBombFragments, 92, 91, 55, 0, 4, 0, 1);
+            practiceGroup.Controls.Add(NewLabel("B碎片", 14, 94, 42, 24, 9F, false));
+            ConfigurePracticeNumber(practiceBombFragments, 62, 91, 55, 0, 4, 0, 1);
             practiceGroup.Controls.Add(practiceBombFragments);
-            ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 155, 90, delegate { ApplyPracticeFields(false, false, true, false); });
+            ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 125, 90, delegate { ApplyPracticeFields(false, false, true, false); });
             practiceGroup.Controls.Add(applyPracticeBombFragments);
 
             practiceGroup.Controls.Add(NewLabel("Power", 250, 94, 44, 24, 9F, false));
@@ -321,10 +334,23 @@ namespace TouhouSpeedController
             githubLink.LinkClicked += delegate { OpenUrl("https://github.com/StarLorentz/TouhouSpeedController/issues"); };
             Controls.Add(githubLink);
 
-            Shown += delegate { BeginInitializeBackend(); };
+            Activated += delegate { TopMost = true; };
+            Deactivate += delegate { TopMost = false; };
+            Shown += delegate
+            {
+                focusHotkeyRegistered = RegisterHotKey(Handle, FocusHotkeyId,
+                    ModControl | ModShift | ModNoRepeat, (uint)Keys.C);
+                if (!focusHotkeyRegistered) Text += "（快捷键被占用）";
+                BeginInitializeBackend();
+            };
             FormClosing += delegate
             {
                 closing = true;
+                if (focusHotkeyRegistered)
+                {
+                    UnregisterHotKey(Handle, FocusHotkeyId);
+                    focusHotkeyRegistered = false;
+                }
                 practiceFreezeTimer.Stop();
                 try { DisableInvincibility(); }
                 catch (Exception ex)
@@ -334,6 +360,20 @@ namespace TouhouSpeedController
                 }
                 if (backend != null) backend.Dispose();
             };
+        }
+
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == WmHotkey && message.WParam.ToInt32() == FocusHotkeyId)
+            {
+                if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+                Show();
+                TopMost = true;
+                Activate();
+                BringToFront();
+                return;
+            }
+            base.WndProc(ref message);
         }
 
         private Label NewLabel(string text, int x, int y, int w, int h, float size, bool bold)
