@@ -563,7 +563,9 @@ namespace TouhouSpeedController
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;
                 practicePower.Value = snapshot.Power / 100m;
-                SetStatus("资源数值已写入并校验；游戏显示或攻击可能稍后才同步。", false);
+                SetStatus(changePower
+                    ? "Power 数值已写入；攻击需等游戏重建配置（如拾取 P 跨整档）才同步。"
+                    : "资源数值已写入并校验；游戏界面可能稍后才同步。", false);
             }
             catch (Exception ex) { SetStatus("应用失败：" + ex.Message, true); }
         }
