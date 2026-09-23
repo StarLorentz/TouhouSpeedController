@@ -70,8 +70,16 @@ namespace TouhouSpeedController
             new DirectProfile { GameCode = "TH15", Sha256 = Th15JapaneseSha256,
                 LivesRva = Th15LivesRva, LifeFragmentsRva = Th15LifeFragmentsRva, BombsRva = Th15BombsRva,
                 BombFragmentsRva = Th15BombFragmentsRva, PowerRva = Th15PowerRva },
+            // TH17: GlobalsReplay starts at 0x4B59DC; offsets follow thprac_th17.cpp.
+            new DirectProfile { GameCode = "TH17", Sha256 = "85CB011E2E43B316C8FA42A3C402565ECDF2F4379F3BAB66D86BCB7BEEF8255F",
+                LivesRva = 0xB5A40, LifeFragmentsRva = 0xB5A44, BombsRva = 0xB5A4C,
+                BombFragmentsRva = 0xB5A50, PowerRva = 0xB5A30 },
             new DirectProfile { GameCode = "TH18", Sha256 = "5AEB74B19939A29A8CF06E4FE7777AAF9139E93478507E039F43318171020E9F",
-                LivesRva = 0xCCD48, LifeFragmentsRva = 0xCCD4C, BombsRva = 0xCCD58, BombFragmentsRva = 0xCCD5C, PowerRva = 0xCCD38 }
+                LivesRva = 0xCCD48, LifeFragmentsRva = 0xCCD4C, BombsRva = 0xCCD58, BombFragmentsRva = 0xCCD5C, PowerRva = 0xCCD38 },
+            // TH20: game side 0 is at RVA 0x1BA568; GlobalsSide begins at +0x88.
+            new DirectProfile { GameCode = "TH20", Sha256 = "E6C4371E214C95DD4DBCAAF6818C79C5E89881270F65B62B8C3C965B65851E2D",
+                LivesRva = 0x1BA6A8, LifeFragmentsRva = 0x1BA6B0, BombsRva = 0x1BA6BC,
+                BombFragmentsRva = 0x1BA6C0, PowerRva = 0x1BA620 }
         };
 
         [DllImport("kernel32.dll", SetLastError = true)]
@@ -90,7 +98,7 @@ namespace TouhouSpeedController
         {
             if (process == null) throw new ArgumentNullException("process");
             string name = process.ProcessName.ToLowerInvariant();
-            if (name != "th14" && name != "th15" && name != "th18")
+            if (name != "th14" && name != "th15" && name != "th17" && name != "th18" && name != "th20")
                 throw new NotSupportedException("当前进程尚未接入基础资源修改。");
             sha256 = ComputeSha256(process.MainModule.FileName);
             foreach (DirectProfile profile in DirectProfiles)

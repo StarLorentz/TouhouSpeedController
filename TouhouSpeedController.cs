@@ -248,7 +248,7 @@ namespace TouhouSpeedController
             Controls.Add(apply); Controls.Add(restore);
 
             GroupBox practiceGroup = new GroupBox();
-            practiceGroup.Text = "练习功能（TH14/15/16/18 日文版）";
+            practiceGroup.Text = "练习功能（已识别版本）";
             practiceGroup.SetBounds(24, 248, 486, 172);
             practiceSupport.SetBounds(14, 24, 450, 25);
             practiceSupport.Text = "支持状态：选中游戏后读取当前值";
@@ -504,7 +504,7 @@ namespace TouhouSpeedController
             try
             {
                 string name = game.Process.ProcessName.ToLowerInvariant();
-                bool direct = name == "th14" || name == "th15" || name == "th18";
+                bool direct = name == "th14" || name == "th15" || name == "th17" || name == "th18" || name == "th20";
                 PracticeSnapshot snapshot = direct
                     ? PracticeMemoryAccess.ReadDirect(game.Process)
                     : PracticeMemoryAccess.ReadTh16(game.Process);
@@ -528,6 +528,13 @@ namespace TouhouSpeedController
                         : "TH16 当前资源读取成功，可以修改后点击“应用数值”。")
                     : "版本已识别；请进入实际关卡后重新读取，再应用数值。", false);
             }
+            catch (InvalidDataException ex)
+            {
+                practiceSupport.Text = "支持状态：版本已识别，资源读数未通过校验";
+                practiceSupport.ForeColor = Color.DarkRed;
+                SetPracticeInputsEnabled(false);
+                SetStatus("读取失败：" + ex.Message + " 请进入关卡后重试。", true);
+            }
             catch (Exception ex)
             {
                 practiceSupport.Text = "支持状态：当前进程或版本不受支持";
@@ -540,7 +547,7 @@ namespace TouhouSpeedController
         private void ApplyPracticeFields(bool changeLives, bool changeBombs, bool changeBombFragments, bool changePower)
         {
             GameProcess game = processBox.SelectedItem as GameProcess;
-            if (game == null) { SetStatus("请先选择 TH16 日文版。", true); return; }
+            if (game == null) { SetStatus("请先选择已适配的游戏进程。", true); return; }
 
             try
             {
@@ -549,7 +556,7 @@ namespace TouhouSpeedController
                 int? fragments = changeBombFragments ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null;
                 int? power = changePower ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null;
                 string name = game.Process.ProcessName.ToLowerInvariant();
-                PracticeSnapshot snapshot = name == "th14" || name == "th15" || name == "th18"
+                PracticeSnapshot snapshot = name == "th14" || name == "th15" || name == "th17" || name == "th18" || name == "th20"
                     ? PracticeMemoryAccess.WriteDirect(game.Process, lives, bombs, fragments, power)
                     : PracticeMemoryAccess.WriteTh16(game.Process, lives, bombs, fragments, power);
                 practiceLives.Value = snapshot.Lives;

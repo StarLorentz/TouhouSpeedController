@@ -22,9 +22,27 @@
       "inGameEffectVerified": false
     },
     {
+      "game": "TH17",
+      "fileName": "th17.exe",
+      "sha256": "85CB011E2E43B316C8FA42A3C402565ECDF2F4379F3BAB66D86BCB7BEEF8255F",
+      "architecture": "x86",
+      "resourceReadEnabled": true,
+      "boundedResourceWriteEnabled": true,
+      "inGameEffectVerified": false
+    },
+    {
       "game": "TH18",
       "fileName": "th18.exe",
       "sha256": "5AEB74B19939A29A8CF06E4FE7777AAF9139E93478507E039F43318171020E9F",
+      "architecture": "x86",
+      "resourceReadEnabled": true,
+      "boundedResourceWriteEnabled": true,
+      "inGameEffectVerified": false
+    },
+    {
+      "game": "TH20",
+      "fileName": "th20.exe",
+      "sha256": "E6C4371E214C95DD4DBCAAF6818C79C5E89881270F65B62B8C3C965B65851E2D",
       "architecture": "x86",
       "resourceReadEnabled": true,
       "boundedResourceWriteEnabled": true,
