@@ -569,7 +569,7 @@ namespace TouhouSpeedController
                 {
                     infiniteLives.Enabled = false;
                     infiniteBombs.Enabled = false;
-                    invincibility.Enabled = (name == "th18" || name == "th20") && inGame;
+                    invincibility.Enabled = (name == "th17" || name == "th18" || name == "th20") && inGame;
                 }
                 SetStatus(inGame
                     ? (direct
@@ -653,7 +653,7 @@ namespace TouhouSpeedController
             {
                 if (activeInvincibility != null)
                     throw new InvalidOperationException("上一个游戏的无敌补丁尚未恢复。");
-                if (game == null) throw new InvalidOperationException("请先选择已识别的 TH16、TH18 或 TH20。");
+                if (game == null) throw new InvalidOperationException("请先选择已识别的 TH16、TH17、TH18 或 TH20。");
                 activeInvincibility = InvincibilityPatch.Enable(game.Process);
                 SetStatus(activeInvincibility.GameCode + " 无敌已开启（实验功能）；练习录像可能不同步。", false);
             }

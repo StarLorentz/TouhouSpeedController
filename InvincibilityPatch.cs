@@ -1,4 +1,4 @@
-// 东方变速器 - experimental TH16/TH18/TH20 invincibility patches
+// 东方变速器 - experimental TH16/TH17/TH18/TH20 invincibility patches
 // Copyright (C) 2026 StarLorentz
 // Licensed under GNU GPL v3.0. See LICENSE for details.
 //
@@ -22,9 +22,11 @@ namespace TouhouSpeedController
         private const int ProcessQueryLimitedInformation = 0x1000;
         private const uint PageExecuteReadWrite = 0x40;
         private const long Th16HitTransitionRva = 0x00043F10;
+        private const long Th17HitTransitionRva = 0x00049420;
         private const long Th18HitTransitionRva = 0x0005D3A0;
         private const long Th20HitTransitionRva = 0x000F86F0;
         private static readonly byte[] Th16ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08 };
+        private static readonly byte[] Th17ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14 };
         private static readonly byte[] Th18ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14 };
         private static readonly byte[] Th20ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x1C };
 
@@ -79,6 +81,13 @@ namespace TouhouSpeedController
                 entry = Th16ExpectedEntry;
                 code = "TH16";
             }
+            else if (name == "th17")
+            {
+                PracticeMemoryAccess.VerifySupportedDirectGame(process, "TH17");
+                hitRva = Th17HitTransitionRva;
+                entry = Th17ExpectedEntry;
+                code = "TH17";
+            }
             else if (name == "th18")
             {
                 PracticeMemoryAccess.VerifySupportedDirectGame(process, "TH18");
@@ -93,7 +102,7 @@ namespace TouhouSpeedController
                 entry = Th20ExpectedEntry;
                 code = "TH20";
             }
-            else throw new NotSupportedException("无敌功能目前只支持已识别的 TH16、TH18 和 TH20。");
+            else throw new NotSupportedException("无敌功能目前只支持已识别的 TH16、TH17、TH18 和 TH20。");
             long moduleBase = process.MainModule.BaseAddress.ToInt64();
             IntPtr handle = OpenProcess(ProcessVmRead | ProcessVmWrite | ProcessVmOperation |
                 ProcessQueryLimitedInformation, false, process.Id);
