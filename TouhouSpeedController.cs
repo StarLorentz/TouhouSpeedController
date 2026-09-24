@@ -195,6 +195,15 @@ namespace TouhouSpeedController
         [DllImport("user32.dll")]
         private static extern IntPtr GetForegroundWindow();
 
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int virtualKey);
+
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr window);
+
         private readonly ComboBox processBox = new ComboBox();
         private readonly NumericUpDown fpsBox = new NumericUpDown();
         private readonly Label status = new Label();
@@ -216,11 +225,13 @@ namespace TouhouSpeedController
         private readonly CheckBox infiniteBombs = new CheckBox();
         private readonly CheckBox invincibility = new CheckBox();
         private readonly System.Windows.Forms.Timer practiceFreezeTimer = new System.Windows.Forms.Timer();
+        private readonly System.Windows.Forms.Timer focusHotkeyFallbackTimer = new System.Windows.Forms.Timer();
         private InvincibilityPatch activeInvincibility;
         private SpeedBackend backend;
         private volatile bool closing;
         private bool updatingInfiniteChecks;
         private bool focusHotkeyRegistered;
+        private bool focusHotkeyHeld;
 
         public MainForm()
         {
@@ -339,16 +350,20 @@ namespace TouhouSpeedController
 
             Activated += delegate { TopMost = true; };
             Deactivate += delegate { TopMost = false; };
+            focusHotkeyFallbackTimer.Interval = 30;
+            focusHotkeyFallbackTimer.Tick += delegate { PollFocusHotkey(); };
             Shown += delegate
             {
                 focusHotkeyRegistered = RegisterHotKey(Handle, FocusHotkeyId,
                     ModControl | ModShift | ModNoRepeat, (uint)Keys.C);
                 if (!focusHotkeyRegistered) Text += "（快捷键被占用）";
+                else focusHotkeyFallbackTimer.Start();
                 BeginInitializeBackend();
             };
             FormClosing += delegate
             {
                 closing = true;
+                focusHotkeyFallbackTimer.Stop();
                 if (focusHotkeyRegistered)
                 {
                     UnregisterHotKey(Handle, FocusHotkeyId);
@@ -369,20 +384,54 @@ namespace TouhouSpeedController
         {
             if (message.Msg == WmHotkey && message.WParam.ToInt32() == FocusHotkeyId)
             {
-                if (WindowState != FormWindowState.Minimized && GetForegroundWindow() == Handle)
+                if (!focusHotkeyHeld)
                 {
-                    TopMost = false;
-                    WindowState = FormWindowState.Minimized;
-                    return;
+                    focusHotkeyHeld = true;
+                    ToggleWindowFromHotkey();
                 }
-                if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
-                Show();
-                TopMost = true;
-                Activate();
-                BringToFront();
                 return;
             }
             base.WndProc(ref message);
+        }
+
+        private void PollFocusHotkey()
+        {
+            bool chordDown = (GetAsyncKeyState((int)Keys.ControlKey) & 0x8000) != 0 &&
+                (GetAsyncKeyState((int)Keys.ShiftKey) & 0x8000) != 0 &&
+                (GetAsyncKeyState((int)Keys.C) & 0x8000) != 0;
+            if (!chordDown) { focusHotkeyHeld = false; return; }
+            if (focusHotkeyHeld || !IsSelectedGameForeground()) return;
+            focusHotkeyHeld = true;
+            ToggleWindowFromHotkey();
+        }
+
+        private bool IsSelectedGameForeground()
+        {
+            GameProcess selected = processBox.SelectedItem as GameProcess;
+            if (selected == null) return false;
+            IntPtr foreground = GetForegroundWindow();
+            if (foreground == IntPtr.Zero) return false;
+            uint foregroundPid;
+            GetWindowThreadProcessId(foreground, out foregroundPid);
+            return foregroundPid == (uint)selected.Process.Id;
+        }
+
+        private void ToggleWindowFromHotkey()
+        {
+            if (WindowState != FormWindowState.Minimized && GetForegroundWindow() == Handle)
+            {
+                TopMost = false;
+                WindowState = FormWindowState.Minimized;
+                return;
+            }
+            if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+            Show();
+            TopMost = true;
+            SetForegroundWindow(Handle);
+            Activate();
+            BringToFront();
+            if (GetForegroundWindow() != Handle)
+                SetStatus("已识别快捷键，但游戏仍在前台；可试窗口化或无边框模式。", true);
         }
 
         private Label NewLabel(string text, int x, int y, int w, int h, float size, bool bold)
