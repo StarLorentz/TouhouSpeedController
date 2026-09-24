@@ -357,7 +357,7 @@ namespace TouhouSpeedController
                 focusHotkeyRegistered = RegisterHotKey(Handle, FocusHotkeyId,
                     ModControl | ModShift | ModNoRepeat, (uint)Keys.C);
                 if (!focusHotkeyRegistered) Text += "（快捷键被占用）";
-                else focusHotkeyFallbackTimer.Start();
+                focusHotkeyFallbackTimer.Start();
                 BeginInitializeBackend();
             };
             FormClosing += delegate
@@ -387,7 +387,7 @@ namespace TouhouSpeedController
                 if (!focusHotkeyHeld)
                 {
                     focusHotkeyHeld = true;
-                    ToggleWindowFromHotkey();
+                    ToggleWindowFromHotkey("系统快捷键");
                 }
                 return;
             }
@@ -400,26 +400,31 @@ namespace TouhouSpeedController
                 (GetAsyncKeyState((int)Keys.ShiftKey) & 0x8000) != 0 &&
                 (GetAsyncKeyState((int)Keys.C) & 0x8000) != 0;
             if (!chordDown) { focusHotkeyHeld = false; return; }
-            if (focusHotkeyHeld || !IsSelectedGameForeground()) return;
+            if (focusHotkeyHeld || !IsTouhouGameForeground()) return;
             focusHotkeyHeld = true;
-            ToggleWindowFromHotkey();
+            ToggleWindowFromHotkey("游戏窗口按键检测");
         }
 
-        private bool IsSelectedGameForeground()
+        private bool IsTouhouGameForeground()
         {
-            GameProcess selected = processBox.SelectedItem as GameProcess;
-            if (selected == null) return false;
             IntPtr foreground = GetForegroundWindow();
             if (foreground == IntPtr.Zero) return false;
             uint foregroundPid;
             GetWindowThreadProcessId(foreground, out foregroundPid);
-            return foregroundPid == (uint)selected.Process.Id;
+            if (foregroundPid == 0) return false;
+            try
+            {
+                using (Process foregroundProcess = Process.GetProcessById((int)foregroundPid))
+                    return IsTouhouProcessName(foregroundProcess.ProcessName);
+            }
+            catch { return false; }
         }
 
-        private void ToggleWindowFromHotkey()
+        private void ToggleWindowFromHotkey(string source)
         {
             if (WindowState != FormWindowState.Minimized && GetForegroundWindow() == Handle)
             {
+                SetStatus(source + "已识别，窗口已最小化。", false);
                 TopMost = false;
                 WindowState = FormWindowState.Minimized;
                 return;
@@ -431,7 +436,9 @@ namespace TouhouSpeedController
             Activate();
             BringToFront();
             if (GetForegroundWindow() != Handle)
-                SetStatus("已识别快捷键，但游戏仍在前台；可试窗口化或无边框模式。", true);
+                SetStatus(source + "已识别，但系统未将变速器切到前台；可先用 Alt+Tab 切换。", true);
+            else
+                SetStatus(source + "已识别，变速器已呼出。", false);
         }
 
         private Label NewLabel(string text, int x, int y, int w, int h, float size, bool bold)
