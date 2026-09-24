@@ -22,7 +22,8 @@ namespace TouhouSpeedController
         private const int ProcessVmOperation = 0x0008;
         private const int ProcessQueryLimitedInformation = 0x1000;
         private const uint PageExecuteReadWrite = 0x40;
-        private const long Th07HitTransitionRva = 0x0003EDC0;
+        private const long Th07BulletHitBranchRva = 0x0003E334;
+        private const long Th07LaserHitBranchRva = 0x0003EB19;
         private const long Th10HitTransitionRva = 0x00026CF0;
         private const long Th11HitTransitionRva = 0x00032A90;
         private const long Th14HitTransitionRva = 0x0004F7A0;
@@ -35,7 +36,10 @@ namespace TouhouSpeedController
         private static readonly byte[] Th17ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14 };
         private static readonly byte[] Th18ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14 };
         private static readonly byte[] Th20ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x1C };
-        private static readonly byte[] Th07ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08 };
+        private static readonly byte[] Th07BulletExpected = { 0xA1, 0x48, 0x9E, 0x4B, 0x00, 0x0F, 0xB7, 0x88, 0xD6, 0x00, 0x00, 0x00 };
+        private static readonly byte[] Th07LaserExpected = { 0xA1, 0x48, 0x9E, 0x4B, 0x00, 0x0F, 0xB7, 0x88, 0xD6, 0x00, 0x00, 0x00 };
+        private static readonly byte[] Th07BulletSkip = { 0xE9, 0xF7, 0xFF, 0xFF, 0xFF };
+        private static readonly byte[] Th07LaserSkip = { 0xE9, 0xD5, 0xFF, 0xFF, 0xFF };
         private static readonly byte[] Th10ExpectedEntry = { 0x83, 0xEC, 0x14, 0x8B, 0x0D, 0xF0 };
         private static readonly byte[] Th11ExpectedEntry = { 0x83, 0xEC, 0x1C, 0x53, 0x55, 0x56 };
         private static readonly byte[] Th14ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08 };
@@ -48,8 +52,12 @@ namespace TouhouSpeedController
         private readonly IntPtr address;
         private readonly byte[] expectedEntry;
         private readonly byte[] replacement;
+        private readonly IntPtr secondaryAddress;
+        private readonly byte[] secondaryExpected;
+        private readonly byte[] secondaryReplacement;
         private readonly string gameCode;
         private bool active;
+        private bool secondaryActive;
 
         public string GameCode { get { return gameCode; } }
 
@@ -72,13 +80,17 @@ namespace TouhouSpeedController
         private static extern bool CloseHandle(IntPtr handle);
 
         private InvincibilityPatch(Process target, IntPtr processHandle, IntPtr patchAddress,
-            byte[] expectedBytes, byte[] replacementBytes, string code)
+            byte[] expectedBytes, byte[] replacementBytes, string code,
+            IntPtr secondAddress, byte[] secondExpected, byte[] secondReplacement)
         {
             process = target;
             handle = processHandle;
             address = patchAddress;
             expectedEntry = expectedBytes;
             replacement = replacementBytes;
+            secondaryAddress = secondAddress;
+            secondaryExpected = secondExpected;
+            secondaryReplacement = secondReplacement;
             gameCode = code;
         }
 
@@ -89,12 +101,19 @@ namespace TouhouSpeedController
             long hitRva;
             byte[] entry;
             byte[] replacement = ReturnVoid;
+            long secondRva = 0;
+            byte[] secondEntry = null;
+            byte[] secondReplacement = null;
             string code;
             if (name == "th07")
             {
                 VerifyExecutableHash(process, "35467EAF8DC7FC85F024F16FB2037255F151CEFDA33CF4867BC9122AAA2E80CA");
-                hitRva = Th07HitTransitionRva;
-                entry = Th07ExpectedEntry;
+                hitRva = Th07BulletHitBranchRva;
+                entry = Th07BulletExpected;
+                replacement = Th07BulletSkip;
+                secondRva = Th07LaserHitBranchRva;
+                secondEntry = Th07LaserExpected;
+                secondReplacement = Th07LaserSkip;
                 code = "TH07";
             }
             else if (name == "th10")
@@ -162,18 +181,29 @@ namespace TouhouSpeedController
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "无法打开 " + code + " 以启用无敌");
 
             InvincibilityPatch patch = new InvincibilityPatch(process, handle,
-                new IntPtr(moduleBase + hitRva), entry, replacement, code);
+                new IntPtr(moduleBase + hitRva), entry, replacement, code,
+                secondRva == 0 ? IntPtr.Zero : new IntPtr(moduleBase + secondRva),
+                secondEntry, secondReplacement);
             try
             {
                 byte[] current = patch.ReadBytes(entry.Length);
                 for (int i = 0; i < current.Length; i++)
                     if (current[i] != entry[i])
                         throw new InvalidOperationException("受击代码与已验证版本不一致，可能已被其他工具修改；已拒绝启用无敌。");
+                if (secondEntry != null && !BytesEqual(patch.ReadBytes(patch.secondaryAddress, secondEntry.Length), secondEntry))
+                    throw new InvalidOperationException("第二条受击路径与已验证版本不一致，已拒绝启用无敌。");
 
                 patch.active = true;
                 patch.WriteBytes(replacement);
                 if (!BytesEqual(patch.ReadBytes(replacement.Length), replacement))
                     throw new IOException("无敌补丁写入后校验失败。");
+                if (secondEntry != null)
+                {
+                    patch.secondaryActive = true;
+                    patch.WriteBytes(patch.secondaryAddress, secondReplacement);
+                    if (!BytesEqual(patch.ReadBytes(patch.secondaryAddress, secondReplacement.Length), secondReplacement))
+                        throw new IOException("第二条受击路径写入后校验失败。");
+                }
                 return patch;
             }
             catch
@@ -181,16 +211,20 @@ namespace TouhouSpeedController
                 // If the write occurred but verification failed, restore before releasing the handle.
                 try
                 {
-                    if (patch.active && !process.HasExited)
+                    if (!process.HasExited)
                     {
-                        byte[] current = patch.ReadBytes(replacement.Length);
-                        if (!BytesCompatibleWithOriginalOrPatch(current, entry, replacement))
-                            throw new InvalidOperationException("受击入口在写入期间被其他程序修改。");
-                        byte[] original = new byte[replacement.Length];
-                        Array.Copy(entry, original, original.Length);
-                        patch.WriteBytes(original);
-                        if (!BytesEqual(patch.ReadBytes(original.Length), original))
-                            throw new IOException("回滚受击入口后校验失败。");
+                        Exception rollbackError = null;
+                        if (patch.secondaryActive)
+                        {
+                            try { patch.RollbackSite(patch.secondaryAddress, secondEntry, secondReplacement); }
+                            catch (Exception ex) { rollbackError = ex; }
+                        }
+                        if (patch.active)
+                        {
+                            try { patch.RollbackSite(patch.address, entry, replacement); }
+                            catch (Exception ex) { if (rollbackError == null) rollbackError = ex; }
+                        }
+                        if (rollbackError != null) throw rollbackError;
                     }
                 }
                 catch (Exception ex)
@@ -204,19 +238,18 @@ namespace TouhouSpeedController
 
         public void Restore()
         {
-            if (!active) return;
-            if (process.HasExited) { active = false; return; }
-
-            byte[] current = ReadBytes(replacement.Length);
-            if (!BytesEqual(current, replacement))
-                throw new InvalidOperationException("无敌补丁位置已被其他程序修改，未覆盖其代码；请退出游戏以彻底恢复。");
-
-            byte[] original = new byte[replacement.Length];
-            Array.Copy(expectedEntry, original, original.Length);
-            WriteBytes(original);
-            if (!BytesEqual(ReadBytes(original.Length), original))
-                throw new IOException("恢复受击代码后的回读校验失败；请退出游戏以彻底恢复。");
-            active = false;
+            if (!active && !secondaryActive) return;
+            if (process.HasExited) { active = false; secondaryActive = false; return; }
+            if (secondaryActive)
+            {
+                RestoreSite(secondaryAddress, secondaryExpected, secondaryReplacement);
+                secondaryActive = false;
+            }
+            if (active)
+            {
+                RestoreSite(address, expectedEntry, replacement);
+                active = false;
+            }
         }
 
         public void Dispose()
@@ -227,32 +260,67 @@ namespace TouhouSpeedController
 
         private byte[] ReadBytes(int count)
         {
+            return ReadBytes(address, count);
+        }
+
+        private byte[] ReadBytes(IntPtr targetAddress, int count)
+        {
             byte[] buffer = new byte[count];
             IntPtr bytesRead;
-            if (!ReadProcessMemory(handle, address, buffer, count, out bytesRead) || bytesRead.ToInt64() != count)
+            if (!ReadProcessMemory(handle, targetAddress, buffer, count, out bytesRead) || bytesRead.ToInt64() != count)
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "读取 " + gameCode + " 受击代码失败");
             return buffer;
         }
 
         private void WriteBytes(byte[] values)
         {
+            WriteBytes(address, values);
+        }
+
+        private void WriteBytes(IntPtr targetAddress, byte[] values)
+        {
             uint oldProtect;
-            if (!VirtualProtectEx(handle, address, (UIntPtr)values.Length, PageExecuteReadWrite, out oldProtect))
+            if (!VirtualProtectEx(handle, targetAddress, (UIntPtr)values.Length, PageExecuteReadWrite, out oldProtect))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "无法修改 " + gameCode + " 受击代码页权限");
             try
             {
                 IntPtr bytesWritten;
-                if (!WriteProcessMemory(handle, address, values, values.Length, out bytesWritten) || bytesWritten.ToInt64() != values.Length)
+                if (!WriteProcessMemory(handle, targetAddress, values, values.Length, out bytesWritten) || bytesWritten.ToInt64() != values.Length)
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "写入 " + gameCode + " 受击代码失败");
-                if (!FlushInstructionCache(handle, address, (UIntPtr)values.Length))
+                if (!FlushInstructionCache(handle, targetAddress, (UIntPtr)values.Length))
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "刷新 " + gameCode + " 指令缓存失败");
             }
             finally
             {
                 uint ignored;
-                if (!VirtualProtectEx(handle, address, (UIntPtr)values.Length, oldProtect, out ignored))
+                if (!VirtualProtectEx(handle, targetAddress, (UIntPtr)values.Length, oldProtect, out ignored))
                     throw new Win32Exception(Marshal.GetLastWin32Error(), "无法恢复 " + gameCode + " 代码页权限");
             }
+        }
+
+        private void RestoreSite(IntPtr targetAddress, byte[] originalEntry, byte[] patchBytes)
+        {
+            byte[] original = new byte[patchBytes.Length];
+            Array.Copy(originalEntry, original, original.Length);
+            byte[] current = ReadBytes(targetAddress, patchBytes.Length);
+            if (BytesEqual(current, original)) return;
+            if (!BytesEqual(current, patchBytes))
+                throw new InvalidOperationException("无敌补丁位置已被其他程序修改，未覆盖其代码；请退出游戏以彻底恢复。");
+            WriteBytes(targetAddress, original);
+            if (!BytesEqual(ReadBytes(targetAddress, original.Length), original))
+                throw new IOException("恢复受击代码后的回读校验失败；请退出游戏以彻底恢复。");
+        }
+
+        private void RollbackSite(IntPtr targetAddress, byte[] originalEntry, byte[] patchBytes)
+        {
+            byte[] current = ReadBytes(targetAddress, patchBytes.Length);
+            if (!BytesCompatibleWithOriginalOrPatch(current, originalEntry, patchBytes))
+                throw new InvalidOperationException("受击入口在写入期间被其他程序修改。");
+            byte[] original = new byte[patchBytes.Length];
+            Array.Copy(originalEntry, original, original.Length);
+            WriteBytes(targetAddress, original);
+            if (!BytesEqual(ReadBytes(targetAddress, original.Length), original))
+                throw new IOException("回滚受击入口后校验失败。");
         }
 
         private static bool BytesEqual(byte[] left, byte[] right)
