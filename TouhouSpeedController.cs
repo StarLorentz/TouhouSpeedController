@@ -595,6 +595,15 @@ namespace TouhouSpeedController
             practiceBombFragments.Value = 0;
             practicePower.Value = 0;
             SetPracticeInputsEnabled(false);
+            GameProcess selected = processBox.SelectedItem as GameProcess;
+            string name = selected == null ? String.Empty : selected.Process.ProcessName.ToLowerInvariant();
+            bool invincibilityOnly = name == "th07" || name == "th10" || name == "th11";
+            readPractice.Enabled = !invincibilityOnly;
+            if (invincibilityOnly)
+            {
+                practiceSupport.Text = "支持状态：此作可测试无敌；资源修改尚未接入";
+                invincibility.Enabled = true;
+            }
         }
 
         private void ReadPracticeClicked(object sender, EventArgs e)
@@ -625,7 +634,8 @@ namespace TouhouSpeedController
                 {
                     infiniteLives.Enabled = false;
                     infiniteBombs.Enabled = false;
-                    invincibility.Enabled = (name == "th17" || name == "th18" || name == "th20") && inGame;
+                    invincibility.Enabled = (name == "th14" || name == "th15" ||
+                        name == "th17" || name == "th18" || name == "th20") && inGame;
                 }
                 SetStatus(inGame
                     ? (direct
@@ -709,7 +719,7 @@ namespace TouhouSpeedController
             {
                 if (activeInvincibility != null)
                     throw new InvalidOperationException("上一个游戏的无敌补丁尚未恢复。");
-                if (game == null) throw new InvalidOperationException("请先选择已识别的 TH16、TH17、TH18 或 TH20。");
+                if (game == null) throw new InvalidOperationException("请先选择已识别的东方游戏进程。");
                 activeInvincibility = InvincibilityPatch.Enable(game.Process);
                 SetStatus(activeInvincibility.GameCode + " 无敌已开启（实验功能）；练习录像可能不同步。", false);
             }
