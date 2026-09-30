@@ -597,7 +597,8 @@ namespace TouhouSpeedController
             SetPracticeInputsEnabled(false);
             GameProcess selected = processBox.SelectedItem as GameProcess;
             string name = selected == null ? String.Empty : selected.Process.ProcessName.ToLowerInvariant();
-            bool invincibilityOnly = name == "th07" || name == "th10" || name == "th11";
+            bool invincibilityOnly = name == "th07" || name == "th10" ||
+                name == "th10chs" || name == "th10cht" || name == "th11" || name == "th11c";
             readPractice.Enabled = !invincibilityOnly;
             if (invincibilityOnly)
             {

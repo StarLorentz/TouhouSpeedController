@@ -116,17 +116,23 @@ namespace TouhouSpeedController
                 secondReplacement = Th07LaserSkip;
                 code = "TH07";
             }
-            else if (name == "th10")
+            else if (name == "th10" || name == "th10chs" || name == "th10cht")
             {
-                VerifyExecutableHash(process, "2F14760B6FBBF57549541583283BADB9A19A4222B90F0A146D5AA17F01DC9040");
+                VerifyExecutableHash(process, name == "th10"
+                    ? "2F14760B6FBBF57549541583283BADB9A19A4222B90F0A146D5AA17F01DC9040"
+                    : name == "th10chs"
+                        ? "97FDCEDE942D425BBB21A08067D95E08D916874A1CB399D73BE16737AFCA6A17"
+                        : "3B2BDA90816BF4E5168A1A0AE0B33902D5C9BEE980B9DCA735848BE098646610");
                 hitRva = Th10HitTransitionRva;
                 entry = Th10ExpectedEntry;
                 replacement = ReturnAndPopArgument;
                 code = "TH10";
             }
-            else if (name == "th11")
+            else if (name == "th11" || name == "th11c")
             {
-                VerifyExecutableHash(process, "2978B17F6184D100D249D4311348DD30C5C32EC75C014B667A525B797D3D8813");
+                VerifyExecutableHash(process, name == "th11"
+                    ? "2978B17F6184D100D249D4311348DD30C5C32EC75C014B667A525B797D3D8813"
+                    : "11A9F3C6718289D9C0B0FA78C148B168A77D3554E804EB2D77F890BE48B3865D");
                 hitRva = Th11HitTransitionRva;
                 entry = Th11ExpectedEntry;
                 code = "TH11";
