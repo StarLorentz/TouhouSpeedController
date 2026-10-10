@@ -3,7 +3,7 @@
 // Licensed under GNU GPL v3.0. See LICENSE for details.
 //
 // Each supported executable has a separately identified player-hit transition.
-// The entry bytes are checked before replacing them with a matching return.
+// Original bytes are checked before returning or taking the game's no-hit branch.
 // The original bytes are restored when the option is disabled.
 
 using System;
@@ -22,6 +22,10 @@ namespace TouhouSpeedController
         private const int ProcessVmOperation = 0x0008;
         private const int ProcessQueryLimitedInformation = 0x1000;
         private const uint PageExecuteReadWrite = 0x40;
+        private const long Th06ClassicBulletHitBranchRva = 0x0004C78E;
+        private const long Th06ClassicLaserHitBranchRva = 0x0004C9D0;
+        private const long Th06NewClassicBulletHitBranchRva = 0x0006C1B5;
+        private const long Th06NewClassicLaserHitBranchRva = 0x0006C3FA;
         private const long Th07BulletHitBranchRva = 0x0003E334;
         private const long Th07LaserHitBranchRva = 0x0003EB19;
         private const long Th10HitTransitionRva = 0x00026CF0;
@@ -33,6 +37,16 @@ namespace TouhouSpeedController
         private const long Th18HitTransitionRva = 0x0005D3A0;
         private const long Th20HitTransitionRva = 0x000F86F0;
         private static readonly byte[] Th16ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08 };
+        private static readonly byte[] Th06ClassicBulletExpected = { 0x40, 0x38, 0xBE, 0xB8, 0x73, 0x00, 0x00, 0x0F, 0x85, 0xC9, 0x00, 0x00, 0x00 };
+        private static readonly byte[] Th06ClassicLaserExpected = { 0x80, 0x3D, 0xD1, 0x33, 0xB7, 0x00, 0x00, 0x0F, 0x85, 0x56, 0x02, 0x00, 0x00 };
+        private static readonly byte[] Th06NewClassicBulletExpected = { 0x80, 0xBB, 0x98, 0x78, 0x00, 0x00, 0x00, 0x0F, 0x85, 0xBA, 0x00, 0x00, 0x00 };
+        private static readonly byte[] Th06NewClassicLaserExpected = { 0x80, 0x3D, 0x87, 0x54, 0x4E, 0x00, 0x00, 0x0F, 0x85, 0x2E, 0x02, 0x00, 0x00 };
+        // Skip hit effects and state changes together, returning no hit to callers.
+        // Keep the existing epilogues so x64 nonvolatile registers are restored.
+        private static readonly byte[] Th06ClassicBulletSkip = { 0xE9, 0xD8, 0x00, 0x00, 0x00 };
+        private static readonly byte[] Th06ClassicLaserSkip = { 0xE9, 0x5E, 0x02, 0x00, 0x00 };
+        private static readonly byte[] Th06NewClassicBulletSkip = { 0xE9, 0xF4, 0xFF, 0xFF, 0xFF };
+        private static readonly byte[] Th06NewClassicLaserSkip = { 0xE9, 0x36, 0x02, 0x00, 0x00 };
         private static readonly byte[] Th17ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14 };
         private static readonly byte[] Th18ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x14 };
         private static readonly byte[] Th20ExpectedEntry = { 0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x1C };
@@ -105,7 +119,21 @@ namespace TouhouSpeedController
             byte[] secondEntry = null;
             byte[] secondReplacement = null;
             string code;
-            if (name == "th07")
+            if (name == "th06c" || name == "th06nc")
+            {
+                bool classic = name == "th06c";
+                VerifyExecutableHash(process, classic
+                    ? "581F6C679100EEBE2BAF33CC786AD8C2D6306B86E0EE1B3CB945692320067ED6"
+                    : "48630A42A2EB6762D0DB2A7E0D151203EFBE67220FEF7D2F9D0D51857928AC82");
+                hitRva = classic ? Th06ClassicBulletHitBranchRva : Th06NewClassicBulletHitBranchRva;
+                entry = classic ? Th06ClassicBulletExpected : Th06NewClassicBulletExpected;
+                replacement = classic ? Th06ClassicBulletSkip : Th06NewClassicBulletSkip;
+                secondRva = classic ? Th06ClassicLaserHitBranchRva : Th06NewClassicLaserHitBranchRva;
+                secondEntry = classic ? Th06ClassicLaserExpected : Th06NewClassicLaserExpected;
+                secondReplacement = classic ? Th06ClassicLaserSkip : Th06NewClassicLaserSkip;
+                code = classic ? "TH06 原典" : "TH06 新典";
+            }
+            else if (name == "th07")
             {
                 VerifyExecutableHash(process, "35467EAF8DC7FC85F024F16FB2037255F151CEFDA33CF4867BC9122AAA2E80CA");
                 hitRva = Th07BulletHitBranchRva;

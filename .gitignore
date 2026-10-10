@@ -3,3 +3,4 @@ build/
 *.suo
 *.log
 __pycache__/
+.analysis-deps/
