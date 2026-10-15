@@ -1,4 +1,4 @@
-// TH16 experimental Power synchronization on the game's update thread.
+// Version-gated Power synchronization on each game's update thread.
 // Copyright (C) 2026 StarLorentz. GPL-3.0-or-later.
 // Addresses researched from the exact local executable; see docs/POWER_ATTACK_REFRESH_RESEARCH.md.
 using System;
@@ -11,17 +11,16 @@ using System.Threading;
 
 namespace TouhouSpeedController
 {
-    internal sealed class Th16PowerStatus
+    internal sealed class PowerSyncStatus
     {
         public int Requested, Completed, Result, Refreshes, Ticks, ThreadId;
         public bool Pending { get { return Requested != Completed; } }
     }
 
-    internal sealed class Th16PowerSync : IDisposable
+    internal sealed class PowerSyncSession : IDisposable
     {
         // End of the update chain, after its lock has been released, before epilogue.
-        private const int HookRva = 0x1567;
-        private static readonly byte[] Original = { 0x5F, 0x8B, 0xC6, 0x5E, 0x5B };
+        private readonly PowerSyncProfile profile;
         private readonly Process process;
         private readonly long moduleBase;
         private IntPtr handle, memory;
@@ -45,27 +44,29 @@ namespace TouhouSpeedController
         [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetThreadContext(IntPtr h, IntPtr context);
         [DllImport("kernel32.dll")] private static extern bool CloseHandle(IntPtr h);
 
-        private Th16PowerSync(Process target) { process = target; moduleBase = target.MainModule.BaseAddress.ToInt64(); }
+        private PowerSyncSession(Process target, PowerSyncProfile layout)
+        { process = target; profile=layout; moduleBase = target.MainModule.BaseAddress.ToInt64(); }
 
-        public static Th16PowerSync Attach(Process target)
+        public static PowerSyncSession Attach(Process target)
         {
-            PracticeMemoryAccess.VerifySupportedTh16(target);
-            Th16PowerSync sync = new Th16PowerSync(target);
+            PowerSyncProfile layout = PowerSyncProfile.Get(target.ProcessName);
+            layout.Verify(target);
+            PowerSyncSession sync = new PowerSyncSession(target,layout);
             sync.handle = OpenProcess(0x1038, false, target.Id);
             if (sync.handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
             try
             {
-                if (!Equal(sync.Read(sync.moduleBase + HookRva, 5), Original))
-                    throw new InvalidOperationException("TH16 更新位置已被其他工具修改，不能启用 Power 同步。");
+                if (!Equal(sync.Read(sync.moduleBase + layout.HookRva, 5), layout.Original))
+                    throw new InvalidOperationException(layout.GameCode+" 更新位置已被其他工具修改，不能启用 Power 同步。");
                 // Also verify the native rebuild entry before publishing a call to it.
-                if (!Equal(sync.Read(sync.moduleBase + 0x440E0, 9), new byte[] { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x83, 0xEC, 0x30 }))
-                    throw new InvalidOperationException("TH16 攻击更新代码不一致，已拒绝启用。");
+                if (!Equal(sync.Read(sync.moduleBase + layout.RebuildRva, layout.RebuildEntry.Length),layout.RebuildEntry))
+                    throw new InvalidOperationException(layout.GameCode+" 攻击更新代码不一致，已拒绝启用。");
                 sync.memory = VirtualAllocEx(sync.handle, IntPtr.Zero, (UIntPtr)8192, 0x3000, 0x04);
                 if (sync.memory == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
                 long data = sync.memory.ToInt64(), code = data + CodeOffset;
-                if (code + 4096 > UInt32.MaxValue) throw new InvalidOperationException("TH16 回调地址超出 32 位范围。");
+                if (code + 4096 > UInt32.MaxValue) throw new InvalidOperationException("Power 回调地址超出 32 位范围。");
                 sync.WriteInt(0, 1); sync.WriteInt(20, -1);
-                byte[] body = BuildCode((uint)code, (uint)data, (uint)sync.moduleBase);
+                byte[] body = BuildCode((uint)code, (uint)data, (uint)sync.moduleBase,layout);
                 sync.Write(code, body);
                 if (!Equal(sync.Read(code, body.Length), body)) throw new IOException("Power 回调写入后校验失败。");
                 uint old;
@@ -73,7 +74,7 @@ namespace TouhouSpeedController
                     !FlushInstructionCache(sync.handle, new IntPtr(code), (UIntPtr)body.Length))
                     throw new Win32Exception(Marshal.GetLastWin32Error());
                 sync.jump = new byte[5]; sync.jump[0] = 0xE9;
-                Array.Copy(BitConverter.GetBytes(unchecked((int)(code - (sync.moduleBase + HookRva + 5)))), 0, sync.jump, 1, 4);
+                Array.Copy(BitConverter.GetBytes(unchecked((int)(code - (sync.moduleBase + layout.HookRva + 5)))), 0, sync.jump, 1, 4);
                 sync.ChangeHook(true);
                 return sync;
             }
@@ -97,10 +98,12 @@ namespace TouhouSpeedController
         public void Request(int power, bool locked)
         {
             if (power < 100 || power > 400) throw new ArgumentOutOfRangeException("power");
-            Th16PowerStatus status = Status();
+            PowerSyncStatus status = Status();
             if (status.Pending) throw new InvalidOperationException("上一次 Power 请求尚未完成；请回到游戏后再试。");
-            int player = ReadInt(moduleBase + 0xA6EF8);
-            if (player == 0 || ReadInt((long)(uint)player + 0x165A8) != 1)
+            int player = ReadInt(moduleBase + profile.PlayerRva);
+            int divisor = ReadInt(moduleBase + profile.DivisorRva);
+            if (player == 0 || ReadInt((long)(uint)player + profile.StateOffset) != 1 || divisor<100 || divisor>400 ||
+                (profile.OwnerOffset!=0 && (uint)ReadInt((long)(uint)player+profile.OwnerOffset)!=(uint)(moduleBase+profile.OwnerRva)))
                 throw new InvalidOperationException("请在自机正常活动时应用 Power，死亡或加载期间请稍后重试。");
             // Publish target/owner/lock before sequence. Game consumes at most one request.
             WriteInt(12, power); WriteInt(40, player); WriteInt(48, locked ? 1 : 0);
@@ -109,11 +112,11 @@ namespace TouhouSpeedController
 
         public void Unlock() { if (!process.HasExited) WriteInt(48, 0); }
 
-        public Th16PowerStatus Status()
+        public PowerSyncStatus Status()
         {
             if (process.HasExited) throw new InvalidOperationException("游戏已退出。");
             byte[] b = Read(memory.ToInt64(), 52);
-            return new Th16PowerStatus { Requested = BitConverter.ToInt32(b, 4), Completed = BitConverter.ToInt32(b, 8),
+            return new PowerSyncStatus { Requested = BitConverter.ToInt32(b, 4), Completed = BitConverter.ToInt32(b, 8),
                 Result = BitConverter.ToInt32(b, 16), Refreshes = BitConverter.ToInt32(b, 28),
                 Ticks = BitConverter.ToInt32(b, 32), ThreadId = BitConverter.ToInt32(b, 36) };
         }
@@ -134,7 +137,7 @@ namespace TouhouSpeedController
 
         private void ChangeHook(bool enable)
         {
-            long site = moduleBase + HookRva;
+            long site = moduleBase + profile.HookRva;
             Stopwatch watch = Stopwatch.StartNew();
             while (watch.ElapsedMilliseconds < 2000)
             {
@@ -156,7 +159,7 @@ namespace TouhouSpeedController
                     if (!enable && ReadInt(memory.ToInt64() + 44) != 0) safe = false;
                     if (safe)
                     {
-                        byte[] expected = enable ? Original : jump, desired = enable ? jump : Original;
+                        byte[] expected = enable ? profile.Original : jump, desired = enable ? jump : profile.Original;
                         if (!Equal(Read(site, 5), expected))
                             throw new InvalidOperationException("Power 同步入口被其他程序改动；请退出游戏恢复。");
                         uint old;
@@ -219,7 +222,7 @@ namespace TouhouSpeedController
         {
             byte[] b = new byte[n]; IntPtr count;
             if (!ReadProcessMemory(handle, new IntPtr(a), b, n, out count) || count.ToInt64() != n)
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "读取 TH16 Power 同步状态失败");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "读取游戏 Power 同步状态失败");
             return b;
         }
         private int ReadInt(long a) { return BitConverter.ToInt32(Read(a, 4), 0); }
@@ -227,14 +230,14 @@ namespace TouhouSpeedController
         {
             IntPtr count;
             if (!WriteProcessMemory(handle, new IntPtr(a), b, b.Length, out count) || count.ToInt64() != b.Length)
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "写入 TH16 Power 同步状态失败");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "写入游戏 Power 同步状态失败");
         }
         private void WriteInt(int offset, int value) { Write(memory.ToInt64() + offset, BitConverter.GetBytes(value)); }
         private static bool Equal(byte[] a, byte[] b)
         { if (a.Length != b.Length) return false; for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false; return true; }
 
         // Small, auditable x86 emitter; no native compiler/runtime dependency in the package.
-        internal static byte[] BuildCode(uint code, uint data, uint image)
+        internal static byte[] BuildCode(uint code, uint data, uint image, PowerSyncProfile layout)
         {
             X86 a = new X86(code);
             a.Emit(0x9C, 0x60, 0x8B, 0xEC); // pushfd; pushad; mov ebp,esp
@@ -244,32 +247,42 @@ namespace TouhouSpeedController
             a.Emit(0x83, 0x3F, 1); a.If(0x85, "restore");
             a.Emit(0xC7, 0x47, 44); a.Word(1);
             a.Emit(0x8B, 0x5F, 4); // ebx = sequence consumed this iteration, never reload to acknowledge
-            a.Emit(0x8B, 0x35); a.Word(image + 0xA6EF8);
+            a.Emit(0x8B, 0x35); a.Word(image + layout.PlayerRva);
             a.Emit(0x85, 0xF6); a.If(0x84, "noPlayer");
-            a.Emit(0x83, 0xBE); a.Word(0x165A8); a.Emit(1); a.If(0x85, "defer");
+            a.Emit(0x83, 0xBE); a.Word(layout.StateOffset); a.Emit(1); a.If(0x85, "defer");
+            if (layout.OwnerOffset!=0)
+            {
+                a.Emit(0x81,0xBE); a.Word(layout.OwnerOffset); a.Word(image+layout.OwnerRva); a.If(0x85,"defer");
+            }
+            // Never divide or rebuild during uninitialized/card setup states.
+            a.Emit(0x8B,0x0D); a.Word(image+layout.DivisorRva);
+            a.Emit(0x81,0xF9); a.Word(100); a.If(0x8C,"defer");
+            a.Emit(0x81,0xF9); a.Word(400); a.If(0x8F,"defer");
             a.Emit(0x3B, 0x5F, 8); a.If(0x84, "noRequest");
             a.Emit(0x3B, 0x77, 40); a.If(0x85, "cancel");
-            a.Emit(0x8B, 0x47, 12, 0xA3); a.Word(image + 0xA57E4); a.Jump("refresh");
+            a.Emit(0x8B, 0x47, 12, 0xA3); a.Word(image + layout.PowerRva); a.Jump("refresh");
             a.Label("noRequest");
             a.Emit(0x83, 0x7F, 48, 1); a.If(0x85, "observe");
-            a.Emit(0x8B, 0x47, 12, 0x3B, 0x05); a.Word(image + 0xA57E4); a.If(0x84, "observe");
-            a.Emit(0xA3); a.Word(image + 0xA57E4); a.Jump("refresh");
+            a.Emit(0x8B, 0x47, 12, 0x3B, 0x05); a.Word(image + layout.PowerRva); a.If(0x84, "observe");
+            a.Emit(0xA3); a.Word(image + layout.PowerRva); a.Jump("refresh");
             a.Label("observe");
-            a.Emit(0xA1); a.Word(image + 0xA57E4);
+            a.Emit(0xA1); a.Word(image + layout.PowerRva);
             a.Emit(0x3D); a.Word(100); a.If(0x8C, "done");
             a.Emit(0x3D); a.Word(400); a.If(0x8F, "done");
             a.Emit(0x3B, 0x47, 20); a.If(0x85, "refresh");
             a.Emit(0x3B, 0x77, 24); a.If(0x85, "refresh");
             // Death/respawn can rebuild a lower tier while the raw Power is already
             // restored to the lock target. Compare actual caches as well as lastPower.
-            a.Emit(0x8B, 0x0D); a.Word(image + 0xA57EC);
-            a.Emit(0x85, 0xC9); a.If(0x8E, "done");
-            a.Emit(0x31, 0xD2, 0xF7, 0xF1, 0x3B, 0x86); a.Word(0x16698); a.If(0x85, "refresh");
-            a.Emit(0x3B, 0x86); a.Word(0x165F4); a.If(0x84, "done");
+            a.Emit(0x8B, 0x0D); a.Word(image + layout.DivisorRva);
+            a.Emit(0x31, 0xD2, 0xF7, 0xF1);
+            foreach (uint offset in layout.CacheOffsets)
+            { a.Emit(0x3B,0x86); a.Word(offset); a.If(0x85,"refresh"); }
+            a.Jump("done");
             a.Label("refresh");
-            a.Emit(0xA1); a.Word(image + 0xA57E4);
-            a.Emit(0x89, 0x47, 20, 0x89, 0x77, 24, 0x8D, 0x8E); a.Word(0x610);
-            a.Emit(0xFC, 0xB8); a.Word(image + 0x440E0); a.Emit(0xFF, 0xD0);
+            a.Emit(0xA1); a.Word(image + layout.PowerRva);
+            a.Emit(0x89, 0x47, 20, 0x89, 0x77, 24, 0x8D, 0x8E); a.Word(layout.ThisOffset);
+            if (layout.Argument.HasValue) { a.Emit(0x68); a.Word(unchecked((uint)layout.Argument.Value)); }
+            a.Emit(0xFC, 0xB8); a.Word(image + layout.RebuildRva); a.Emit(0xFF, 0xD0);
             a.Emit(0xFF, 0x47, 28, 0xC7, 0x47, 16); a.Word(1);
             a.Emit(0x89, 0x5F, 8); a.Jump("done");
             a.Label("noPlayer");
@@ -284,7 +297,7 @@ namespace TouhouSpeedController
             a.Label("done"); a.Emit(0xC7, 0x47, 44); a.Word(0);
             a.Label("restore");
             a.Emit(0x0F, 0xAE, 0x0C, 0x24, 0x8B, 0xE5, 0x61, 0x9D); // FXRSTOR; saved stack; popad; popfd
-            a.Emit(Original); a.To(image + HookRva + 5);
+            a.Emit(layout.Original); a.To(image + layout.HookRva + 5);
             return a.Finish();
         }
 

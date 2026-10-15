@@ -23,13 +23,13 @@ $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $packageDir 'src') -Force | Out-Null
 
-& $compiler /nologo /target:winexe /platform:anycpu /optimize+ /win32manifest:"$projectDir\app.manifest" /win32icon:"$projectDir\assets\logo.ico" /out:"$packageDir\东方变速器.exe" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll "$projectDir\TouhouSpeedController.cs" "$projectDir\PracticeMemoryAccess.cs" "$projectDir\InvincibilityPatch.cs" "$projectDir\Th16PowerSync.cs"
+& $compiler /nologo /target:winexe /platform:anycpu /optimize+ /win32manifest:"$projectDir\app.manifest" /win32icon:"$projectDir\assets\logo.ico" /out:"$packageDir\东方变速器.exe" /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll "$projectDir\TouhouSpeedController.cs" "$projectDir\PracticeMemoryAccess.cs" "$projectDir\InvincibilityPatch.cs" "$projectDir\PowerSyncSession.cs" "$projectDir\PowerSyncProfile.cs"
 if ($LASTEXITCODE -ne 0) { throw "C# compiler failed with exit code $LASTEXITCODE" }
 
 Copy-Item -LiteralPath "$portableDir\bridge32.exe","$portableDir\bridge64.exe","$portableDir\speedpatch32.dll","$portableDir\speedpatch64.dll" -Destination $packageDir -Force
 Copy-Item -LiteralPath "$projectDir\README.txt","$projectDir\OPEN_SOURCE_NOTICE.txt","$projectDir\THIRD_PARTY_NOTICES.md" -Destination $packageDir -Force
 Copy-Item -LiteralPath "$projectDir\assets\logo.png","$projectDir\assets\app-image.png" -Destination $packageDir -Force
-Copy-Item -LiteralPath "$projectDir\TouhouSpeedController.cs","$projectDir\PracticeMemoryAccess.cs","$projectDir\InvincibilityPatch.cs","$projectDir\Th16PowerSync.cs","$projectDir\app.manifest","$projectDir\build.ps1" -Destination (Join-Path $packageDir 'src') -Force
+Copy-Item -LiteralPath "$projectDir\TouhouSpeedController.cs","$projectDir\PracticeMemoryAccess.cs","$projectDir\InvincibilityPatch.cs","$projectDir\PowerSyncSession.cs","$projectDir\PowerSyncProfile.cs","$projectDir\app.manifest","$projectDir\build.ps1" -Destination (Join-Path $packageDir 'src') -Force
 Copy-Item -LiteralPath "$projectDir\assets\logo.png","$projectDir\assets\logo.ico","$projectDir\assets\app-image.png" -Destination (Join-Path $packageDir 'src') -Force
 Copy-Item -LiteralPath "$projectDir\docs","$projectDir\practice","$projectDir\tools" -Destination (Join-Path $packageDir 'src') -Recurse -Force
 Copy-Item -LiteralPath $openSpeedyLicense -Destination (Join-Path $packageDir 'LICENSE-GPLv3.txt') -Force

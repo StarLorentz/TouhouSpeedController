@@ -226,7 +226,7 @@ namespace TouhouSpeedController
         private readonly CheckBox invincibility = new CheckBox();
         private readonly CheckBox lockPower = new CheckBox();
         private readonly System.Windows.Forms.Timer powerSyncTimer = new System.Windows.Forms.Timer();
-        private Th16PowerSync powerSync;
+        private PowerSyncSession powerSync;
         private bool updatingPowerLock, powerRequestPending;
         private readonly System.Windows.Forms.Timer practiceFreezeTimer = new System.Windows.Forms.Timer();
         private readonly System.Windows.Forms.Timer focusHotkeyFallbackTimer = new System.Windows.Forms.Timer();
@@ -384,7 +384,7 @@ namespace TouhouSpeedController
                 try { StopPowerSync(); }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("恢复 Power 同步入口失败：" + ex.Message + "\n请退出 TH16 恢复原始代码。",
+                    MessageBox.Show("恢复 Power 同步入口失败：" + ex.Message + "\n请退出相应游戏恢复原始代码。",
                         "东方变速器", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 }
                 try { DisableInvincibility(); }
@@ -599,7 +599,7 @@ namespace TouhouSpeedController
         {
             StopInfiniteResources();
             try { StopPowerSync(); }
-            catch (Exception ex) { SetStatus("停止 Power 同步失败：" + ex.Message + " 请退出 TH16。", true); }
+            catch (Exception ex) { SetStatus("停止 Power 同步失败：" + ex.Message + " 请退出相应游戏。", true); }
             try { DisableInvincibility(); }
             catch (Exception ex)
             {
@@ -691,14 +691,14 @@ namespace TouhouSpeedController
                 int? fragments = changeBombFragments ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null;
                 int? power = changePower ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null;
                 string name = game.Process.ProcessName.ToLowerInvariant();
-                bool th16Sync = name == "th16" && changePower;
-                if (th16Sync) EnsurePowerSync(game.Process);
-                PracticeSnapshot snapshot = name == "th14" || name == "th15" || name == "th17" || name == "th18" || name == "th20"
-                    ? PracticeMemoryAccess.WriteDirect(game.Process, lives, bombs, fragments, power)
-                    : (th16Sync && !changeLives && !changeBombs && !changeBombFragments
-                        ? PracticeMemoryAccess.ReadTh16(game.Process)
-                        : PracticeMemoryAccess.WriteTh16(game.Process, lives, bombs, fragments, th16Sync ? null : power));
-                if (th16Sync)
+                bool syncPower = PowerSyncProfile.Supports(name) && changePower;
+                bool direct = name != "th16";
+                if (syncPower) EnsurePowerSync(game.Process);
+                PracticeSnapshot snapshot = syncPower && !changeLives && !changeBombs && !changeBombFragments
+                    ? (direct ? PracticeMemoryAccess.ReadDirect(game.Process) : PracticeMemoryAccess.ReadTh16(game.Process))
+                    : (direct ? PracticeMemoryAccess.WriteDirect(game.Process,lives,bombs,fragments,syncPower ? null : power)
+                        : PracticeMemoryAccess.WriteTh16(game.Process,lives,bombs,fragments,syncPower ? null : power));
+                if (syncPower)
                 {
                     powerSync.Request(power.Value, lockPower.Checked);
                     powerRequestPending = true;
@@ -707,8 +707,8 @@ namespace TouhouSpeedController
                 practiceLives.Value = snapshot.Lives;
                 practiceBombs.Value = snapshot.Bombs;
                 practiceBombFragments.Value = snapshot.BombFragments;
-                practicePower.Value = th16Sync ? power.Value / 100m : snapshot.Power / 100m;
-                SetStatus(th16Sync ? "Power 请求已提交；回到游戏后由游戏更新线程同步攻击。"
+                practicePower.Value = syncPower ? power.Value / 100m : snapshot.Power / 100m;
+                SetStatus(syncPower ? "Power 请求已提交；回到游戏后由游戏更新线程同步攻击。"
                     : changePower
                     ? "Power 数值已写入；攻击需等游戏重建配置（如拾取 P 跨整档）才同步。"
                     : "资源数值已写入并校验；游戏界面可能稍后才同步。", false);
@@ -720,7 +720,7 @@ namespace TouhouSpeedController
         {
             if (powerSync != null && powerSync.ProcessId == game.Id) return;
             if (powerSync != null) StopPowerSync();
-            powerSync = Th16PowerSync.Attach(game);
+            powerSync = PowerSyncSession.Attach(game);
         }
 
         private void PowerLockChanged(object sender, EventArgs e)
@@ -739,8 +739,8 @@ namespace TouhouSpeedController
             try
             {
                 GameProcess game = processBox.SelectedItem as GameProcess;
-                if (game == null || game.Process.ProcessName.ToLowerInvariant() != "th16")
-                    throw new NotSupportedException("Power 即时同步和锁定目前只支持已识别的 TH16。");
+                if (game == null || !PowerSyncProfile.Supports(game.Process.ProcessName))
+                    throw new NotSupportedException("Power 即时同步和锁定支持已识别的 TH14–TH18、TH20。");
                 EnsurePowerSync(game.Process);
                 powerSync.Request(Decimal.ToInt32(practicePower.Value * 100m), true);
                 powerRequestPending = true;
@@ -759,7 +759,7 @@ namespace TouhouSpeedController
             if (powerSync == null) { powerSyncTimer.Stop(); return; }
             try
             {
-                Th16PowerStatus state = powerSync.Status();
+                PowerSyncStatus state = powerSync.Status();
                 if (powerRequestPending && !state.Pending)
                 {
                     powerRequestPending = false;
@@ -930,7 +930,7 @@ namespace TouhouSpeedController
             practiceBombFragments.Enabled = enabled;
             practicePower.Enabled = enabled;
             GameProcess powerGame = processBox.SelectedItem as GameProcess;
-            lockPower.Enabled = enabled && powerGame != null && powerGame.Process.ProcessName.ToLowerInvariant() == "th16";
+            lockPower.Enabled = enabled && powerGame != null && PowerSyncProfile.Supports(powerGame.Process.ProcessName);
             applyPracticeLives.Enabled = enabled;
             applyPracticeBombs.Enabled = enabled;
             applyPracticeBombFragments.Enabled = enabled;

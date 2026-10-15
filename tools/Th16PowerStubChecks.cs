@@ -22,7 +22,7 @@ internal static class Th16PowerStubChecks
         long b = (long)(uint)image.ToInt32(), d = (long)(uint)allocation.ToInt32(), code = d + 4096, player = d + 0x10000;
         try
         {
-            byte[] stub = Th16PowerSync.BuildCode((uint)code, (uint)d, (uint)b);
+            byte[] stub = PowerSyncSession.BuildCode((uint)code, (uint)d, (uint)b, PowerSyncProfile.Get("th16"));
             Bytes(code, stub);
             Bytes(b + 0x156C, 0x8B, 0xE5, 0x5D, 0xC3); // original function epilogue
             // Fake rebuild: keep its this pointer contract and update both observable tiers.
