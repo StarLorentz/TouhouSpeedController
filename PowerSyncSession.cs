@@ -28,7 +28,7 @@ namespace TouhouSpeedController
         private byte[] jump;
         private bool installed, published;
         // Mailbox DWORDs: enabled, request, completed, target, result, lastPower,
-        // lastPlayer, refreshes, ticks, threadId, requestPlayer, busy, locked.
+        // lastPlayer, refreshes, ticks, threadId, requestPlayer, busy, locked, requestDivisor.
         private const int CodeOffset = 4096;
 
         [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr OpenProcess(int access, bool inherit, int pid);
@@ -100,18 +100,31 @@ namespace TouhouSpeedController
 
         public int ProcessId { get { return process.Id; } }
 
+        public int RequestDisplayed(int displayedPower,bool locked)
+        {
+            int divisor=profile.ConstantDivisor!=0 ? profile.ConstantDivisor : ReadInt(moduleBase+profile.DivisorRva);
+            if(divisor<profile.DivisorMin||divisor>profile.DivisorMax) throw new InvalidOperationException("机体火力尚未初始化，请重新读取。");
+            int raw=profile.ScaledUnits ? PracticeMemoryAccess.PowerToNative(displayedPower,divisor) : displayedPower;
+            Request(raw,locked);
+            return profile.ScaledUnits ? PracticeMemoryAccess.PowerToDisplay(raw,divisor) : displayedPower;
+        }
+
         public void Request(int power, bool locked)
         {
-            if (power < 100 || power > 400) throw new ArgumentOutOfRangeException("power");
+            if (power < profile.PowerMin || power > profile.PowerMax) throw new ArgumentOutOfRangeException("power");
             PowerSyncStatus status = Status();
             if (status.Pending) throw new InvalidOperationException("上一次 Power 请求尚未完成；请回到游戏后再试。");
             int player = ReadInt(moduleBase + profile.PlayerRva);
-            int divisor = ReadInt(moduleBase + profile.DivisorRva);
-            if (player == 0 || ReadInt((long)(uint)player + profile.StateOffset) != 1 || divisor<100 || divisor>400 ||
+            int divisor = profile.ConstantDivisor!=0 ? profile.ConstantDivisor : ReadInt(moduleBase + profile.DivisorRva);
+            int maximum=profile.MaximumRva!=0 ? ReadInt(moduleBase+profile.MaximumRva) : profile.PowerMax;
+            if(profile.Name=="th11" && !PracticeMemoryAccess.ValidTh11PowerScale(divisor,maximum)) throw new InvalidOperationException("TH11 机体火力尚未初始化。");
+            if(power>maximum) throw new ArgumentOutOfRangeException("power","Power 超出当前机体上限，请重新读取。");
+            if (player == 0 || ReadInt((long)(uint)player + profile.StateOffset) != 1 || divisor<profile.DivisorMin || divisor>profile.DivisorMax ||
                 (profile.OwnerOffset!=0 && (uint)ReadInt((long)(uint)player+profile.OwnerOffset)!=(uint)(moduleBase+profile.OwnerRva)))
                 throw new InvalidOperationException("请在自机正常活动时应用 Power，死亡或加载期间请稍后重试。");
             // Publish target/owner/lock before sequence. Game consumes at most one request.
             WriteInt(12, power); WriteInt(40, player); WriteInt(48, locked ? 1 : 0);
+            if(profile.ScaledUnits) WriteInt(52,divisor);
             WriteInt(4, unchecked(status.Requested + 1));
         }
 
@@ -269,25 +282,38 @@ namespace TouhouSpeedController
                 a.Emit(0x81,0xBE); a.Word(layout.OwnerOffset); a.Word(image+layout.OwnerRva); a.If(0x85,"defer");
             }
             // Never divide or rebuild during uninitialized/card setup states.
-            a.Emit(0x8B,0x0D); a.Word(image+layout.DivisorRva);
-            a.Emit(0x81,0xF9); a.Word(100); a.If(0x8C,"defer");
-            a.Emit(0x81,0xF9); a.Word(400); a.If(0x8F,"defer");
+            LoadDivisor(a,image,layout);
+            a.Emit(0x81,0xF9); a.Word((uint)layout.DivisorMin); a.If(0x8C,"defer");
+            a.Emit(0x81,0xF9); a.Word((uint)layout.DivisorMax); a.If(0x8F,"defer");
+            if(layout.Name=="th11") {
+                a.Emit(0x83,0xF9,20); a.If(0x85,"scale12");
+                a.Emit(0x83,0x3D); a.Word(image+layout.MaximumRva); a.Emit(80); a.If(0x85,"defer"); a.Jump("scaleReady");
+                a.Label("scale12"); a.Emit(0x83,0xF9,12); a.If(0x85,"defer");
+                a.Emit(0x83,0x3D); a.Word(image+layout.MaximumRva); a.Emit(96); a.If(0x85,"defer"); a.Label("scaleReady");
+            }
+            if(layout.ScaledUnits) {
+                a.Emit(0x83,0x7F,52,0); a.If(0x84,"scaleUnchanged");
+                a.Emit(0x3B,0x4F,52); a.If(0x85,"scaleChanged"); a.Label("scaleUnchanged");
+            }
             a.Emit(0x3B, 0x5F, 8); a.If(0x84, "noRequest");
             a.Emit(0x3B, 0x77, 40); a.If(0x85, "cancel");
-            a.Emit(0x8B, 0x47, 12, 0xA3); a.Word(image + layout.PowerRva); a.Jump("refresh");
+            a.Emit(0x8B, 0x47, 12); CheckMaximum(a,image,layout,"scaleChanged");
+            a.Emit(0xA3); a.Word(image + layout.PowerRva); a.Jump("refresh");
             a.Label("noRequest");
             a.Emit(0x83, 0x7F, 48, 1); a.If(0x85, "observe");
             a.Emit(0x8B, 0x47, 12, 0x3B, 0x05); a.Word(image + layout.PowerRva); a.If(0x84, "observe");
+            CheckMaximum(a,image,layout,"scaleChanged");
             a.Emit(0xA3); a.Word(image + layout.PowerRva); a.Jump("refresh");
             a.Label("observe");
             a.Emit(0xA1); a.Word(image + layout.PowerRva);
-            a.Emit(0x3D); a.Word(100); a.If(0x8C, "done");
-            a.Emit(0x3D); a.Word(400); a.If(0x8F, "done");
+            a.Emit(0x3D); a.Word((uint)layout.PowerMin); a.If(0x8C, "done");
+            a.Emit(0x3D); a.Word((uint)layout.PowerMax); a.If(0x8F, "done");
+            CheckMaximum(a,image,layout,"done");
             a.Emit(0x3B, 0x47, 20); a.If(0x85, "refresh");
             a.Emit(0x3B, 0x77, 24); a.If(0x85, "refresh");
             // Death/respawn can rebuild a lower tier while the raw Power is already
             // restored to the lock target. Compare actual caches as well as lastPower.
-            a.Emit(0x8B, 0x0D); a.Word(image + layout.DivisorRva);
+            LoadDivisor(a,image,layout);
             a.Emit(0x31, 0xD2, 0xF7, 0xF1);
             foreach (uint offset in layout.CacheOffsets)
             { a.Emit(0x3B,0x86); a.Word(offset); a.If(0x85,"refresh"); }
@@ -297,9 +323,11 @@ namespace TouhouSpeedController
             a.Emit(0x89, 0x47, 20, 0x89, 0x77, 24, 0x8D, 0x8E); a.Word(layout.ThisOffset);
             if(layout.CallMode==1) a.Emit(0x56); // original TH12 callee uses [entry esp+4], RET 4
             if(layout.CallMode==2) a.Emit(0x57,0x8B,0xFE); // TH13 takes EDI; save mailbox pointer
+            if(layout.CallMode==3) a.Emit(0x53,0x8B,0xDE); // TH11 takes EBX; save request sequence
             if (layout.Argument.HasValue) { a.Emit(0x68); a.Word(unchecked((uint)layout.Argument.Value)); }
             a.Emit(0xFC, 0xB8); a.Word(image + layout.RebuildRva); a.Emit(0xFF, 0xD0);
             if(layout.CallMode==2) a.Emit(0x5F);
+            if(layout.CallMode==3) a.Emit(0x5B);
             a.Emit(0xFF, 0x47, 28, 0xC7, 0x47, 16); a.Word(1);
             a.Emit(0x89, 0x5F, 8); a.Jump("done");
             a.Label("noPlayer");
@@ -308,6 +336,10 @@ namespace TouhouSpeedController
             a.Emit(0x3B, 0x5F, 8); a.If(0x84, "done");
             a.Label("cancel");
             a.Emit(0xC7, 0x47, 16); a.Word(3); a.Emit(0x89, 0x5F, 8); a.Jump("done");
+            if(layout.ScaledUnits) {
+                a.Label("scaleChanged"); a.Emit(0xC7,0x47,48); a.Word(0);
+                a.Emit(0xC7,0x47,16); a.Word(4); a.Emit(0x89,0x5F,8); a.Jump("done");
+            }
             a.Label("defer");
             a.Emit(0x3B, 0x5F, 8); a.If(0x84, "done");
             a.Emit(0xC7, 0x47, 16); a.Word(2);
@@ -317,6 +349,14 @@ namespace TouhouSpeedController
             a.Emit(layout.Original); a.To(image + layout.HookRva + (uint)layout.Original.Length);
             return a.Finish();
         }
+
+        private static void LoadDivisor(X86 a,uint image,PowerSyncProfile p)
+        {
+            if(p.ConstantDivisor!=0) { a.Emit(0xB9); a.Word((uint)p.ConstantDivisor); }
+            else { a.Emit(0x8B,0x0D); a.Word(image+p.DivisorRva); }
+        }
+        private static void CheckMaximum(X86 a,uint image,PowerSyncProfile p,string target)
+        { if(p.MaximumRva!=0) { a.Emit(0x3B,0x05); a.Word(image+p.MaximumRva); a.If(0x8F,target); } }
 
         private sealed class X86
         {

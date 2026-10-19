@@ -619,8 +619,7 @@ namespace TouhouSpeedController
             GameProcess selected = processBox.SelectedItem as GameProcess;
             string name = selected == null ? String.Empty : selected.Process.ProcessName.ToLowerInvariant();
             ConfigurePracticeOptions(name);
-            bool invincibilityOnly = name == "th06c" || name == "th06nc" || name == "th07" || name == "th10" ||
-                name == "th10chs" || name == "th10cht" || name == "th11" || name == "th11c";
+            bool invincibilityOnly = name == "th06c" || name == "th06nc" || name == "th07";
             readPractice.Enabled = !invincibilityOnly;
             if (invincibilityOnly)
             {
@@ -651,9 +650,12 @@ namespace TouhouSpeedController
                 ShowPracticeSnapshot(snapshot);
                 bool inGame = direct ? snapshot.InGame : snapshot.Power >= 100 && snapshot.Power <= 400;
                 SetPracticeInputsEnabled(inGame);
+                string canonical=PracticeMemoryAccess.CanonicalName(name);
                 SetStatus(inGame
                     ? (name=="th09" ? "TH09 仅操作 P1；生命 10=5颗心，蓄力 4.00=满槽。此作无 Bomb、B碎片或普通 Power。"
                        : name=="th08" ? "TH08 已读取；Power 范围 0–128，按本作原规则影响射击；此作没有 B碎片。"
+                       : canonical=="th10" ? "TH10 残机、Power 已读取；Bomb 消耗 Power。锁定 Power 可维持资源，最小步长 0.05。"
+                       : canonical=="th11" ? "TH11 残机、Power 已读取；Bomb 共用 Power。上限和步长按当前机体设置，修改值按原生点数取整。"
                        : "资源已读取；可单项应用或全部应用，Power 同步在游戏运行时完成。")
                     : "版本已识别；请进入实际关卡后重新读取，再应用数值。", false);
             }
@@ -697,7 +699,7 @@ namespace TouhouSpeedController
                         : PracticeMemoryAccess.WriteTh16(game.Process,lives,bombs,fragments,syncPower ? null : power));
                 if (syncPower)
                 {
-                    powerSync.Request(power.Value, lockPower.Checked);
+                    power=powerSync.RequestDisplayed(power.Value, lockPower.Checked);
                     powerRequestPending = true;
                     powerSyncTimer.Start();
                 }
@@ -756,7 +758,8 @@ namespace TouhouSpeedController
                 if (game == null || !PowerSyncProfile.Supports(game.Process.ProcessName))
                     throw new NotSupportedException("此版本尚未接入 Power 同步和锁定。");
                 EnsurePowerSync(game.Process);
-                powerSync.Request(Decimal.ToInt32(practicePower.Value * 100m), true);
+                int accepted=powerSync.RequestDisplayed(Decimal.ToInt32(practicePower.Value * 100m), true);
+                practicePower.Value=accepted/100m;
                 powerRequestPending = true;
                 powerSyncTimer.Start();
                 SetStatus("Power 锁定请求已提交；回到游戏后生效。应用新值可更新锁定目标。", false);
@@ -774,6 +777,10 @@ namespace TouhouSpeedController
             try
             {
                 PowerSyncStatus state = powerSync.Status();
+                if(state.Result==4) {
+                    StopPowerSync(); StopInfiniteResources(); SetPracticeInputsEnabled(false);
+                    SetStatus("机体的火力上限或单位已变化，资源锁定已停止；请重新读取当前值。",false); return;
+                }
                 if (powerRequestPending && !state.Pending)
                 {
                     powerRequestPending = false;
@@ -977,11 +984,15 @@ namespace TouhouSpeedController
             practiceBombFragments.Value=0; practiceBombFragments.Maximum=o.FragmentsMax;
             practicePower.Value=0; practicePower.Maximum=o.PowerMax/100m;
             practicePower.DecimalPlaces=o.IntegerPower ? 0 : 2;
-            practicePower.Increment=o.IntegerPower ? 1m : 0.01m;
+            practicePower.Increment=o.IntegerPower ? 1m : o.PowerStep;
             invincibility.Text=PracticeMemoryAccess.CanonicalName(name)=="th09" ? "无敌 P1（实验）" : "无敌（实验）";
         }
         private void ShowPracticeSnapshot(PracticeSnapshot snapshot)
         {
+            if(snapshot.DisplayPowerMaximum>0) {
+                practicePower.Value=0; practicePower.Maximum=snapshot.DisplayPowerMaximum/100m;
+                practicePower.Increment=1m/snapshot.NativePowerDivisor;
+            }
             practiceLives.Value=Math.Max(0,Math.Min(practiceLives.Maximum,snapshot.Lives));
             practiceBombs.Value=Math.Max(0,Math.Min(practiceBombs.Maximum,snapshot.Bombs));
             practiceBombFragments.Value=Math.Max(0,Math.Min(practiceBombFragments.Maximum,snapshot.BombFragments));

@@ -34,7 +34,8 @@ internal static class PowerSyncProbe
         public Row Read()
         {
             PowerSyncProfile p=Profile; Row r=new Row();
-            r.Player=(uint)Int(Base+p.PlayerRva); r.Power=Int(Base+p.PowerRva); r.Divisor=Int(Base+p.DivisorRva);
+            r.Player=(uint)Int(Base+p.PlayerRva); r.Power=Int(Base+p.PowerRva); r.Divisor=p.ConstantDivisor!=0 ? p.ConstantDivisor : Int(Base+p.DivisorRva);
+            r.DivisorMin=p.DivisorMin; r.DivisorMax=p.DivisorMax; r.Maximum=p.MaximumRva!=0 ? Int(Base+p.MaximumRva) : p.PowerMax;
             r.State=r.Player==0?-1:Int(r.Player+p.StateOffset); r.Caches=new int[p.CacheOffsets.Length];
             for(int i=0;i<r.Caches.Length;i++) r.Caches[i]=r.Player==0?-1:Int(r.Player+p.CacheOffsets[i]);
             return r;
@@ -45,9 +46,9 @@ internal static class PowerSyncProbe
     private sealed class Row
     {
         public long Player;
-        public int Power,Divisor,State;
+        public int Power,Divisor,State,DivisorMin,DivisorMax,Maximum;
         public int[] Caches;
-        public bool Active { get { return Player!=0&&State==1&&Divisor>=100&&Divisor<=400; } }
+        public bool Active { get { return Player!=0&&State==1&&Divisor>=DivisorMin&&Divisor<=DivisorMax; } }
         public bool Matches
         {
             get { if(!Active) return false; foreach(int c in Caches) if(c!=Power/Divisor) return false; return true; }
@@ -90,22 +91,26 @@ internal static class PowerSyncProbe
                 {
                     if(!Wait(()=>reader.Read().Active,30000)) throw new Exception("No active initialized player within 30 seconds");
                     session=PowerSyncSession.Attach(game);
-                    int[] values={100,400,250,251,320};
+                    Row initial=reader.Read();
+                    int lockedTarget=reader.Profile.ScaledUnits ? initial.Divisor*3+initial.Divisor/5 : 320;
+                    int[] values=reader.Profile.ScaledUnits
+                        ? new int[]{initial.Divisor,initial.Maximum,initial.Divisor*5/2,initial.Divisor*5/2+1,lockedTarget}
+                        : new int[]{100,400,250,251,lockedTarget};
                     foreach(int value in values)
                     {
                         if(!Wait(()=>reader.Read().Active,10000)) throw new Exception("Player did not become active");
-                        session.Request(value,value==320);
+                        session.Request(value,value==lockedTarget);
                         if(!Wait(()=>!session.Status().Pending,10000)||session.Status().Result==3) throw new Exception("Request not completed or cancelled by scene transition");
-                        if(!Wait(()=>{ Row r=reader.Read(); return r.Matches&&(value!=320||r.Power==320); },10000)) throw new Exception("Attack cache did not match Power");
+                        if(!Wait(()=>{ Row r=reader.Read(); return r.Matches&&(value!=lockedTarget||r.Power==lockedTarget); },10000)) throw new Exception("Attack cache did not match Power");
                         PowerSyncStatus s=session.Status();
                         log("PASS request="+value+" "+reader.Read()+" refreshes="+s.Refreshes+" ticks="+s.Ticks+" thread="+s.ThreadId);
                     }
                     Thread.Sleep(1500);
-                    if(!Wait(()=>{ Row r=reader.Read(); return r.Matches&&r.Power==320; },10000)) throw new Exception("Lock did not maintain target");
+                    if(!Wait(()=>{ Row r=reader.Read(); return r.Matches&&r.Power==lockedTarget; },10000)) throw new Exception("Lock did not maintain target");
                     log("PASS lock held "+reader.Read());
                     session.Unlock();
                     if(!Wait(()=>reader.Read().Active,10000)) throw new Exception("Player not active for unlock test");
-                    session.Request(399,false);
+                    session.Request(reader.Profile.ScaledUnits ? initial.Maximum-1 : 399,false);
                     if(!Wait(()=>!session.Status().Pending&&reader.Read().Matches,10000)) throw new Exception("Unlock request failed");
                     log("PASS unlocked "+reader.Read());
                     session.Dispose(); session=null;

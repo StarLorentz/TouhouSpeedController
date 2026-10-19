@@ -11,9 +11,12 @@ namespace TouhouSpeedController
         public uint HookRva, RebuildRva, PlayerRva, PowerRva, DivisorRva, StateOffset, ThisOffset;
         public uint[] CacheOffsets;
         public int? Argument;
-        // 0=thiscall, 1=player stack argument (callee pops), 2=player in EDI.
+        // 0=thiscall, 1=player stack argument (callee pops), 2=player in EDI, 3=player in EBX.
         public int CallMode;
         public bool HitFilterOnly;
+        public bool ScaledUnits;
+        public int PowerMin=100, PowerMax=400, DivisorMin=100, DivisorMax=400, ConstantDivisor;
+        public uint MaximumRva;
         public byte[] Original = { 0x5F, 0x8B, 0xC6, 0x5E, 0x5B };
         public byte[] RebuildEntry;
         public uint OwnerOffset, OwnerRva;
@@ -23,6 +26,14 @@ namespace TouhouSpeedController
         { return new byte[] { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x83, 0xEC, locals }; }
 
         internal static readonly PowerSyncProfile[] All = {
+            new PowerSyncProfile { Name="th10", HookRva=0x49D06, RebuildRva=0x26F70, PlayerRva=0x77834,
+                PowerRva=0x74C48, StateOffset=0x458, CallMode=1, ScaledUnits=true, ConstantDivisor=20,
+                PowerMin=0, PowerMax=100, DivisorMin=20, DivisorMax=20, CacheOffsets=new uint[]{0x3500},
+                Original=new byte[]{0x8B,0x44,0x24,0x04,0x5B}, RebuildEntry=new byte[]{0x83,0xEC,0x38,0x66,0x8B,0x0D,0x48,0x4C,0x47,0x00} },
+            new PowerSyncProfile { Name="th11", HookRva=0x56DE5, RebuildRva=0x32CC0, PlayerRva=0xA8EB4,
+                PowerRva=0xA56E8, DivisorRva=0xA574C, StateOffset=0x928, CallMode=3, ScaledUnits=true, MaximumRva=0xA5748,
+                PowerMin=0, PowerMax=96, DivisorMin=12, DivisorMax=20, CacheOffsets=new uint[]{0x7C90},
+                Original=new byte[]{0x8B,0x04,0x24,0x83,0xC4,0x08}, RebuildEntry=Entry(0x40) },
             new PowerSyncProfile { Name="th12", HookRva=0x625F5, RebuildRva=0x385B0, PlayerRva=0xB4514,
                 PowerRva=0xB0C48, DivisorRva=0xB0CD4, StateOffset=0xA28, ThisOffset=0, CallMode=1,
                 CacheOffsets=new uint[]{0xC41C}, Original=new byte[]{0x8B,0x04,0x24,0x83,0xC4,0x08},

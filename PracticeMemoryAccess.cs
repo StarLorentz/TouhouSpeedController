@@ -3,7 +3,7 @@
 // Licensed under GNU GPL v3.0. See LICENSE for details.
 //
 // Resource addresses were adapted from thprac/src/thprac/thprac_th08.cpp,
-// thprac_th09.cpp, thprac_th12.cpp, thprac_th13.cpp, thprac_th14.cpp,
+// thprac_th09.cpp, thprac_th10.cpp, thprac_th11.cpp, thprac_th12.cpp, thprac_th13.cpp, thprac_th14.cpp,
 // thprac_th15.cpp, thprac_th16.cpp, thprac_th17.cpp, thprac_th18.cpp,
 // and thprac_th20.cpp
 // at commit 585fae1aad4b720f350655a44e3f2ec7fc0dfa25.
@@ -29,6 +29,7 @@ namespace TouhouSpeedController
         public int Power;
         public string GameCode;
         public bool InGame;
+        public int NativePowerDivisor, NativePowerMaximum, DisplayPowerMaximum;
     }
 
     internal sealed class PracticeOptions
@@ -38,6 +39,7 @@ namespace TouhouSpeedController
         public bool HasBombs = true, HasFragments = true, IntegerPower;
         public bool MemoryPowerLock, InfiniteResources;
         public string LivesLabel = "残机", PowerLabel = "Power";
+        public decimal PowerStep = 0.01m;
     }
 
     internal static class PracticeMemoryAccess
@@ -75,6 +77,8 @@ namespace TouhouSpeedController
             public long ResourcePointerRva, PlayerPointerRva;
             public bool FloatResources, FloatPower;
             public int FragmentMultiplier = 1;
+            public int ConstantPowerDivisor, NativePowerMaximum;
+            public long PowerDivisorRva, PowerMaximumRva;
         }
 
         private static readonly DirectProfile[] DirectProfiles = {
@@ -83,6 +87,16 @@ namespace TouhouSpeedController
             // TH09 is P1-only: health is in half-heart units, charge is a float 0..400.
             new DirectProfile { GameCode="TH09", Sha256="10350095BCF95EDB59E03BEE9849A2DC8A7714B4927AD5909C569C550FCE6822",
                 ResourcePointerRva=0xA7D94, LivesRva=0xA8, PowerRva=0x30388, FloatPower=true },
+            new DirectProfile { GameCode="TH10", Sha256="2F14760B6FBBF57549541583283BADB9A19A4222B90F0A146D5AA17F01DC9040",
+                LivesRva=0x74C70, PowerRva=0x74C48, PlayerPointerRva=0x77834, ConstantPowerDivisor=20, NativePowerMaximum=100 },
+            new DirectProfile { GameCode="TH10", ProcessName="th10chs", Sha256="97FDCEDE942D425BBB21A08067D95E08D916874A1CB399D73BE16737AFCA6A17",
+                LivesRva=0x74C70, PowerRva=0x74C48, PlayerPointerRva=0x77834, ConstantPowerDivisor=20, NativePowerMaximum=100 },
+            new DirectProfile { GameCode="TH10", ProcessName="th10cht", Sha256="3B2BDA90816BF4E5168A1A0AE0B33902D5C9BEE980B9DCA735848BE098646610",
+                LivesRva=0x74C70, PowerRva=0x74C48, PlayerPointerRva=0x77834, ConstantPowerDivisor=20, NativePowerMaximum=100 },
+            new DirectProfile { GameCode="TH11", Sha256="2978B17F6184D100D249D4311348DD30C5C32EC75C014B667A525B797D3D8813",
+                LivesRva=0xA5718, PowerRva=0xA56E8, PlayerPointerRva=0xA8EB4, PowerDivisorRva=0xA574C, PowerMaximumRva=0xA5748 },
+            new DirectProfile { GameCode="TH11", ProcessName="th11c", Sha256="11A9F3C6718289D9C0B0FA78C148B168A77D3554E804EB2D77F890BE48B3865D",
+                LivesRva=0xA5718, PowerRva=0xA56E8, PlayerPointerRva=0xA8EB4, PowerDivisorRva=0xA574C, PowerMaximumRva=0xA5748 },
             new DirectProfile { GameCode="TH12", Sha256="D8D644D2E64957A3031B1A1399D0502E1DDAA5252D2C4E492770AD6717827628",
                 LivesRva=0xB0C98, BombsRva=0xB0CA0, BombFragmentsRva=0xB0CA4, PowerRva=0xB0C48,
                 PlayerPointerRva=0xB4514, FragmentMultiplier=2 },
@@ -146,7 +160,8 @@ namespace TouhouSpeedController
         public static string CanonicalName(string name)
         {
             name = name.ToLowerInvariant();
-            return name=="th12c" ? "th12" : name=="th13c" ? "th13" : name;
+            return name=="th12c" ? "th12" : name=="th13c" ? "th13" :
+                name=="th10chs"||name=="th10cht" ? "th10" : name=="th11c" ? "th11" : name;
         }
 
         public static PracticeOptions Options(string name)
@@ -154,9 +169,11 @@ namespace TouhouSpeedController
             name=CanonicalName(name); PracticeOptions o=new PracticeOptions();
             if(name=="th08") { o.HasFragments=false; o.PowerMin=0; o.PowerMax=12800; o.IntegerPower=true; o.MemoryPowerLock=true; o.InfiniteResources=true; }
             if(name=="th09") { o.LivesMax=10; o.LivesLabel="生命"; o.HasBombs=false; o.HasFragments=false; o.PowerMin=0; o.PowerLabel="蓄力"; o.MemoryPowerLock=true; o.InfiniteResources=true; }
+            if(name=="th10"||name=="th11") { o.LivesMax=9; o.HasBombs=false; o.HasFragments=false; o.PowerMin=0; o.PowerMax=name=="th10" ? 500 : 800; o.PowerStep=name=="th10" ? 0.05m : 0.01m; o.InfiniteResources=true; }
             if(name=="th12") { o.FragmentsMax=2; o.InfiniteResources=true; }
             if(name=="th13") { o.FragmentsMax=7; o.InfiniteResources=true; }
             if(name=="th16") o.InfiniteResources=true;
+            if(name=="th14"||name=="th15"||name=="th17"||name=="th18"||name=="th20") o.InfiniteResources=true;
             return o;
         }
 
@@ -180,6 +197,15 @@ namespace TouhouSpeedController
             snapshot.Bombs = options.HasBombs ? ReadResource(handle,data+profile.BombsRva,profile.FloatResources,1) : 0;
             snapshot.BombFragments = options.HasFragments ? ReadInt32(handle,data+profile.BombFragmentsRva)/profile.FragmentMultiplier : 0;
             snapshot.Power = ReadResource(handle,data+profile.PowerRva,profile.FloatResources||profile.FloatPower,profile.FloatResources ? 100 : 1);
+            if(profile.ConstantPowerDivisor!=0 || profile.PowerDivisorRva!=0) {
+                snapshot.NativePowerDivisor=profile.ConstantPowerDivisor!=0 ? profile.ConstantPowerDivisor : ReadInt32(handle,moduleBase+profile.PowerDivisorRva);
+                snapshot.NativePowerMaximum=profile.NativePowerMaximum!=0 ? profile.NativePowerMaximum : ReadInt32(handle,moduleBase+profile.PowerMaximumRva);
+                if(profile.GameCode=="TH11" && !ValidTh11PowerScale(snapshot.NativePowerDivisor,snapshot.NativePowerMaximum))
+                    throw new InvalidOperationException("TH11 机体火力尚未初始化，请进入关卡后重新读取。");
+                if(snapshot.Power<0||snapshot.Power>snapshot.NativePowerMaximum) throw new InvalidDataException("原生 Power 超出当前机体上限。");
+                snapshot.Power=PowerToDisplay(snapshot.Power,snapshot.NativePowerDivisor);
+                snapshot.DisplayPowerMaximum=PowerToDisplay(snapshot.NativePowerMaximum,snapshot.NativePowerDivisor);
+            }
             if(snapshot.Lives < -1 || snapshot.Lives>99 || snapshot.Bombs<0 || snapshot.Bombs>99 ||
                 snapshot.BombFragments<0 || snapshot.BombFragments>99 || snapshot.Power<0 || snapshot.Power>options.PowerMax)
                 throw new InvalidDataException("资源读数超出本作范围，请进入关卡后重试。");
@@ -198,6 +224,13 @@ namespace TouhouSpeedController
             if(p<0x10000) throw new InvalidOperationException("尚未创建玩家数据，请先进入关卡。");
             return p;
         }
+
+        internal static bool ValidTh11PowerScale(int divisor,int maximum)
+        { return (divisor==20&&maximum==80)||(divisor==12&&maximum==96); }
+        internal static int PowerToDisplay(int nativePower,int divisor)
+        { return Decimal.ToInt32(Decimal.Round(nativePower*100m/divisor,0,MidpointRounding.AwayFromZero)); }
+        internal static int PowerToNative(int displayedPower,int divisor)
+        { return Decimal.ToInt32(Decimal.Round(displayedPower*divisor/100m,0,MidpointRounding.AwayFromZero)); }
 
         private static int ReadResource(IntPtr h,long address,bool floating,int scale)
         {
@@ -241,6 +274,11 @@ namespace TouhouSpeedController
                 PracticeSnapshot before = ReadDirectSnapshot(handle, moduleBase, profile, sha256);
                 if (!before.InGame)
                     throw new InvalidOperationException("请进入实际关卡并重新读取后，再应用数值。");
+                int? nativePower=power;
+                if(power.HasValue&&before.NativePowerDivisor!=0) {
+                    if(power.Value>before.DisplayPowerMaximum) throw new ArgumentOutOfRangeException("power","Power 超出当前机体上限，请重新读取。");
+                    nativePower=PowerToNative(power.Value,before.NativePowerDivisor);
+                }
                 long data=ResolveData(handle,moduleBase,profile);
                 // Keep the exact native DWORDs, including float fractions and TH12 half-fragments, for rollback.
                 int oldLives=ReadInt32(handle,data+profile.LivesRva);
@@ -252,12 +290,12 @@ namespace TouhouSpeedController
                     if (lives.HasValue) WriteResource(handle,data+profile.LivesRva,lives.Value,profile.FloatResources,1);
                     if (bombs.HasValue) WriteResource(handle,data+profile.BombsRva,bombs.Value,profile.FloatResources,1);
                     if (bombFragments.HasValue) WriteInt32(handle,data+profile.BombFragmentsRva,bombFragments.Value*profile.FragmentMultiplier);
-                    if (power.HasValue) WriteResource(handle,data+profile.PowerRva,power.Value,profile.FloatResources||profile.FloatPower,profile.FloatResources ? 100 : 1);
+                    if (power.HasValue) WriteResource(handle,data+profile.PowerRva,nativePower.Value,profile.FloatResources||profile.FloatPower,profile.FloatResources ? 100 : 1);
                     PracticeSnapshot after = ReadDirectSnapshot(handle, moduleBase, profile, sha256);
                     if ((lives.HasValue && after.Lives != lives.Value) ||
                         (bombs.HasValue && after.Bombs != bombs.Value) ||
                         (bombFragments.HasValue && after.BombFragments != bombFragments.Value) ||
-                        (power.HasValue && after.Power != power.Value))
+                        (power.HasValue && after.Power != (before.NativePowerDivisor!=0 ? PowerToDisplay(nativePower.Value,before.NativePowerDivisor) : power.Value)))
                         throw new IOException("写入后回读不一致，请重新读取。");
                     return after;
                 }

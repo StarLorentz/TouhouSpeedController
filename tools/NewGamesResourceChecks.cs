@@ -24,7 +24,7 @@ internal static class NewGamesResourceChecks
         foreach(object profile in profiles)
         {
             string code=(string)profile.GetType().GetField("GameCode").GetValue(profile);
-            if(code!="TH08"&&code!="TH09"&&code!="TH12"&&code!="TH13") continue;
+            if(code!="TH08"&&code!="TH09"&&code!="TH10"&&code!="TH11"&&code!="TH12"&&code!="TH13") continue;
             string name=(string)profile.GetType().GetField("ProcessName").GetValue(profile) ?? code.ToLowerInvariant();
             IntPtr memory=VirtualAlloc(IntPtr.Zero,(UIntPtr)0x1500000,0x3000,4);
             if(memory==IntPtr.Zero) throw new Exception("Allocation failed");
@@ -37,12 +37,27 @@ internal static class NewGamesResourceChecks
                 Put(data+Field(profile,"LivesRva"),floats ? Bits(3f) : 3);
                 if(options.HasBombs) Put(data+Field(profile,"BombsRva"),floats ? Bits(5f) : 5);
                 if(options.HasFragments) Put(data+Field(profile,"BombFragmentsRva"),code=="TH12" ? 3 : 6);
-                Put(data+Field(profile,"PowerRva"),code=="TH08" ? Bits(64f) : code=="TH09" ? Bits(123.45f) : 250);
+                Put(data+Field(profile,"PowerRva"),code=="TH08" ? Bits(64f) : code=="TH09" ? Bits(123.45f) : code=="TH10"||code=="TH11" ? 50 : 250);
+                if(code=="TH11") { Put(b+Field(profile,"PowerDivisorRva"),20); Put(b+Field(profile,"PowerMaximumRva"),80); }
                 if(code=="TH08") Put(b+0x13CE8B0,2);
                 PracticeSnapshot s=(PracticeSnapshot)read.Invoke(null,new object[]{new IntPtr(-1),b,profile,"synthetic"});
                 Check(s.InGame&&s.Lives==3&&s.Bombs==(options.HasBombs ? 5 : 0),name+" active typed resources");
                 Check(s.Power==(code=="TH08" ? 6400 : code=="TH09" ? 123 : 250),name+" Power scale");
                 Check(s.BombFragments==(code=="TH12" ? 1 : code=="TH13" ? 6 : 0),name+" fragments/unsupported fields");
+                if(code=="TH10"||code=="TH11") {
+                    Check(s.DisplayPowerMaximum==(code=="TH10" ? 500 : 400)&&s.NativePowerDivisor==20,name+" native/display scale and maximum");
+                    Check(PracticeMemoryAccess.PowerToNative(399,20)==80&&PracticeMemoryAccess.PowerToDisplay(80,20)==400,name+" nearest representable Power");
+                }
+                if(code=="TH11") {
+                    Put(b+Field(profile,"PowerDivisorRva"),12); Put(b+Field(profile,"PowerMaximumRva"),96); Put(data+Field(profile,"PowerRva"),96);
+                    s=(PracticeSnapshot)read.Invoke(null,new object[]{new IntPtr(-1),b,profile,"synthetic"});
+                    Check(s.Power==800&&s.DisplayPowerMaximum==800&&s.NativePowerDivisor==12,name+" Marisa A maximum");
+                    Check(PracticeMemoryAccess.PowerToNative(667,12)==80&&PracticeMemoryAccess.PowerToDisplay(80,12)==667,name+" Marisa A rounding round trip");
+                    Put(b+Field(profile,"PowerDivisorRva"),13);
+                    bool rejected=false; try { read.Invoke(null,new object[]{new IntPtr(-1),b,profile,"synthetic"}); }
+                    catch(TargetInvocationException e) { rejected=e.InnerException is InvalidOperationException; }
+                    Check(rejected,name+" reject uninitialized shot scale");
+                }
                 if(code=="TH08"||code=="TH09") {
                     write.Invoke(null,new object[]{new IntPtr(-1),data+Field(profile,"PowerRva"),code=="TH08" ? 12800 : 321,true,code=="TH08" ? 100 : 1});
                     Check(Marshal.ReadInt32(new IntPtr(data+Field(profile,"PowerRva")))==Bits(code=="TH08" ? 128f : 321f),name+" native float write");
