@@ -11,6 +11,9 @@ namespace TouhouSpeedController
         public uint HookRva, RebuildRva, PlayerRva, PowerRva, DivisorRva, StateOffset, ThisOffset;
         public uint[] CacheOffsets;
         public int? Argument;
+        // 0=thiscall, 1=player stack argument (callee pops), 2=player in EDI.
+        public int CallMode;
+        public bool HitFilterOnly;
         public byte[] Original = { 0x5F, 0x8B, 0xC6, 0x5E, 0x5B };
         public byte[] RebuildEntry;
         public uint OwnerOffset, OwnerRva;
@@ -20,6 +23,14 @@ namespace TouhouSpeedController
         { return new byte[] { 0x55, 0x8B, 0xEC, 0x83, 0xE4, 0xF8, 0x83, 0xEC, locals }; }
 
         internal static readonly PowerSyncProfile[] All = {
+            new PowerSyncProfile { Name="th12", HookRva=0x625F5, RebuildRva=0x385B0, PlayerRva=0xB4514,
+                PowerRva=0xB0C48, DivisorRva=0xB0CD4, StateOffset=0xA28, ThisOffset=0, CallMode=1,
+                CacheOffsets=new uint[]{0xC41C}, Original=new byte[]{0x8B,0x04,0x24,0x83,0xC4,0x08},
+                RebuildEntry=new byte[]{0x83,0xEC,0x38,0x8B,0x0D,0x90,0x0C,0x4B,0x00} },
+            new PowerSyncProfile { Name="th13", HookRva=0x70BFE, RebuildRva=0x44DF0, PlayerRva=0xC22C4,
+                PowerRva=0xBE7E8, DivisorRva=0xBE7F0, StateOffset=0x65C, ThisOffset=0, CallMode=2,
+                CacheOffsets=new uint[]{0x146C4}, Original=new byte[]{0x8B,0x45,0xFC,0x8B,0xE5},
+                RebuildEntry=new byte[]{0x55,0x8B,0xEC,0x83,0xEC,0x50} },
             new PowerSyncProfile { Name="th14", HookRva=0x1382, RebuildRva=0x4F970, PlayerRva=0xDB67C,
                 PowerRva=0xF5858, DivisorRva=0xF5860, StateOffset=0x684, ThisOffset=0,
                 CacheOffsets=new uint[]{0x18334}, RebuildEntry=Entry(0x44) },
@@ -43,16 +54,23 @@ namespace TouhouSpeedController
                 OwnerOffset=0x14858, OwnerRva=0x1BA568 }
         };
 
+        // thprac's P1-filtered skip at the sole native hit call, preserving P2.
+        internal static readonly PowerSyncProfile Th09Hit = new PowerSyncProfile {
+            Name="th09", HookRva=0x1E8EC, RebuildRva=0x1E420, HitFilterOnly=true,
+            Original=new byte[]{0xE8,0x2F,0xFB,0xFF,0xFF}, RebuildEntry=new byte[]{0x55,0x8B,0xEC,0x51,0x56,0x8B,0xF1}
+        };
+
         public static bool Supports(string name)
-        { foreach (PowerSyncProfile p in All) if (String.Equals(p.Name,name,StringComparison.OrdinalIgnoreCase)) return true; return false; }
+        { name=PracticeMemoryAccess.CanonicalName(name); foreach (PowerSyncProfile p in All) if (String.Equals(p.Name,name,StringComparison.OrdinalIgnoreCase)) return true; return false; }
         public static PowerSyncProfile Get(string name)
         {
+            name=PracticeMemoryAccess.CanonicalName(name);
             foreach (PowerSyncProfile p in All) if (String.Equals(p.Name,name,StringComparison.OrdinalIgnoreCase)) return p;
             throw new NotSupportedException("此游戏尚未接入 Power 同步和锁定。");
         }
         public void Verify(Process game)
         {
-            if (!String.Equals(game.ProcessName,Name,StringComparison.OrdinalIgnoreCase)) throw new NotSupportedException("Power 配置不能用于其他作品。");
+            if (!String.Equals(PracticeMemoryAccess.CanonicalName(game.ProcessName),Name,StringComparison.OrdinalIgnoreCase)) throw new NotSupportedException("Power 配置不能用于其他作品。");
             if (Name=="th16") PracticeMemoryAccess.VerifySupportedTh16(game);
             else PracticeMemoryAccess.VerifySupportedDirectGame(game,GameCode);
         }

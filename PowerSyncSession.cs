@@ -1,4 +1,5 @@
 // Version-gated Power synchronization on each game's update thread.
+// The same verified detour lifecycle also hosts TH09's P1-only hit filter.
 // Copyright (C) 2026 StarLorentz. GPL-3.0-or-later.
 // Addresses researched from the exact local executable; see docs/POWER_ATTACK_REFRESH_RESEARCH.md.
 using System;
@@ -49,14 +50,17 @@ namespace TouhouSpeedController
 
         public static PowerSyncSession Attach(Process target)
         {
-            PowerSyncProfile layout = PowerSyncProfile.Get(target.ProcessName);
+            return Attach(target,PowerSyncProfile.Get(target.ProcessName));
+        }
+        internal static PowerSyncSession Attach(Process target,PowerSyncProfile layout)
+        {
             layout.Verify(target);
             PowerSyncSession sync = new PowerSyncSession(target,layout);
             sync.handle = OpenProcess(0x1038, false, target.Id);
             if (sync.handle == IntPtr.Zero) throw new Win32Exception(Marshal.GetLastWin32Error());
             try
             {
-                if (!Equal(sync.Read(sync.moduleBase + layout.HookRva, 5), layout.Original))
+                if (!Equal(sync.Read(sync.moduleBase + layout.HookRva, layout.Original.Length), layout.Original))
                     throw new InvalidOperationException(layout.GameCode+" 更新位置已被其他工具修改，不能启用 Power 同步。");
                 // Also verify the native rebuild entry before publishing a call to it.
                 if (!Equal(sync.Read(sync.moduleBase + layout.RebuildRva, layout.RebuildEntry.Length),layout.RebuildEntry))
@@ -73,7 +77,8 @@ namespace TouhouSpeedController
                 if (!VirtualProtectEx(sync.handle, new IntPtr(code), (UIntPtr)4096, 0x20, out old) ||
                     !FlushInstructionCache(sync.handle, new IntPtr(code), (UIntPtr)body.Length))
                     throw new Win32Exception(Marshal.GetLastWin32Error());
-                sync.jump = new byte[5]; sync.jump[0] = 0xE9;
+                sync.jump = new byte[layout.Original.Length]; sync.jump[0] = 0xE9;
+                for(int i=5;i<sync.jump.Length;i++) sync.jump[i]=0x90;
                 Array.Copy(BitConverter.GetBytes(unchecked((int)(code - (sync.moduleBase + layout.HookRva + 5)))), 0, sync.jump, 1, 4);
                 sync.ChangeHook(true);
                 return sync;
@@ -138,6 +143,7 @@ namespace TouhouSpeedController
         private void ChangeHook(bool enable)
         {
             long site = moduleBase + profile.HookRva;
+            int length=profile.Original.Length;
             Stopwatch watch = Stopwatch.StartNew();
             while (watch.ElapsedMilliseconds < 2000)
             {
@@ -153,17 +159,17 @@ namespace TouhouSpeedController
                         if (SuspendThread(th) == UInt32.MaxValue) { CloseHandle(th); safe = false; break; }
                         suspended.Add(th);
                         long ip = InstructionPointer(th);
-                        if ((ip > site && ip < site + 5) ||
+                        if ((ip > site && ip < site + length) ||
                             (!enable && ip >= memory.ToInt64() + CodeOffset && ip < memory.ToInt64() + 8192)) safe = false;
                     }
                     if (!enable && ReadInt(memory.ToInt64() + 44) != 0) safe = false;
                     if (safe)
                     {
                         byte[] expected = enable ? profile.Original : jump, desired = enable ? jump : profile.Original;
-                        if (!Equal(Read(site, 5), expected))
+                        if (!Equal(Read(site, length), expected))
                             throw new InvalidOperationException("Power 同步入口被其他程序改动；请退出游戏恢复。");
                         uint old;
-                        if (!VirtualProtectEx(handle, new IntPtr(site), (UIntPtr)5, 0x40, out old))
+                        if (!VirtualProtectEx(handle, new IntPtr(site), (UIntPtr)length, 0x40, out old))
                             throw new Win32Exception(Marshal.GetLastWin32Error());
                         try
                         {
@@ -172,14 +178,14 @@ namespace TouhouSpeedController
                                 installed = true; // retain callback allocation if a partial write cannot be rolled back
                                 published = true;
                                 Write(site, desired);
-                                if (!Equal(Read(site, 5), desired) || !FlushInstructionCache(handle, new IntPtr(site), (UIntPtr)5))
+                                if (!Equal(Read(site, length), desired) || !FlushInstructionCache(handle, new IntPtr(site), (UIntPtr)length))
                                     throw new IOException("Power 同步入口写入后验证失败。");
                                 installed = enable;
                             }
                             catch
                             {
                                 Write(site, expected);
-                                bool restored = Equal(Read(site, 5), expected) && FlushInstructionCache(handle, new IntPtr(site), (UIntPtr)5);
+                                bool restored = Equal(Read(site, length), expected) && FlushInstructionCache(handle, new IntPtr(site), (UIntPtr)length);
                                 if (!restored) { installed = true; throw new IOException("无法恢复 Power 同步入口，请退出游戏。"); }
                                 installed = !enable;
                                 throw;
@@ -188,7 +194,7 @@ namespace TouhouSpeedController
                         finally
                         {
                             uint ignored;
-                            if (!VirtualProtectEx(handle, new IntPtr(site), (UIntPtr)5, old, out ignored))
+                            if (!VirtualProtectEx(handle, new IntPtr(site), (UIntPtr)length, old, out ignored))
                                 throw new Win32Exception(Marshal.GetLastWin32Error());
                         }
                         return;
@@ -240,6 +246,14 @@ namespace TouhouSpeedController
         internal static byte[] BuildCode(uint code, uint data, uint image, PowerSyncProfile layout)
         {
             X86 a = new X86(code);
+            if(layout.HitFilterOnly)
+            {
+                a.Emit(0x9C,0x83,0x3D); a.Word(data); a.Emit(1); a.If(0x85,"nativeHit");
+                a.Emit(0x83,0x7E,0x08,0); a.If(0x85,"nativeHit");
+                a.Emit(0x9D); a.To(image+layout.HookRva+5);
+                a.Label("nativeHit"); a.Emit(0x9D); a.Call(image+layout.RebuildRva); a.To(image+layout.HookRva+5);
+                return a.Finish();
+            }
             a.Emit(0x9C, 0x60, 0x8B, 0xEC); // pushfd; pushad; mov ebp,esp
             a.Emit(0x81, 0xEC); a.Word(0x220); a.Emit(0x83, 0xE4, 0xF0, 0x0F, 0xAE, 0x04, 0x24); // aligned FXSAVE
             a.Emit(0xBF); a.Word(data);
@@ -281,8 +295,11 @@ namespace TouhouSpeedController
             a.Label("refresh");
             a.Emit(0xA1); a.Word(image + layout.PowerRva);
             a.Emit(0x89, 0x47, 20, 0x89, 0x77, 24, 0x8D, 0x8E); a.Word(layout.ThisOffset);
+            if(layout.CallMode==1) a.Emit(0x56); // original TH12 callee uses [entry esp+4], RET 4
+            if(layout.CallMode==2) a.Emit(0x57,0x8B,0xFE); // TH13 takes EDI; save mailbox pointer
             if (layout.Argument.HasValue) { a.Emit(0x68); a.Word(unchecked((uint)layout.Argument.Value)); }
             a.Emit(0xFC, 0xB8); a.Word(image + layout.RebuildRva); a.Emit(0xFF, 0xD0);
+            if(layout.CallMode==2) a.Emit(0x5F);
             a.Emit(0xFF, 0x47, 28, 0xC7, 0x47, 16); a.Word(1);
             a.Emit(0x89, 0x5F, 8); a.Jump("done");
             a.Label("noPlayer");
@@ -297,7 +314,7 @@ namespace TouhouSpeedController
             a.Label("done"); a.Emit(0xC7, 0x47, 44); a.Word(0);
             a.Label("restore");
             a.Emit(0x0F, 0xAE, 0x0C, 0x24, 0x8B, 0xE5, 0x61, 0x9D); // FXRSTOR; saved stack; popad; popfd
-            a.Emit(layout.Original); a.To(image + layout.HookRva + 5);
+            a.Emit(layout.Original); a.To(image + layout.HookRva + (uint)layout.Original.Length);
             return a.Finish();
         }
 
@@ -315,6 +332,7 @@ namespace TouhouSpeedController
             public void Jump(string target) { Emit(0xE9); Fix(target); }
             private void Fix(string label) { fixups.Add(bytes.Count, label); Word(0); }
             public void To(uint target) { Emit(0xE9); Word(unchecked(target - (address + (uint)bytes.Count + 4))); }
+            public void Call(uint target) { Emit(0xE8); Word(unchecked(target - (address + (uint)bytes.Count + 4))); }
             public byte[] Finish()
             {
                 byte[] b = bytes.ToArray();

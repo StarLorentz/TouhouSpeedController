@@ -72,6 +72,7 @@ namespace TouhouSpeedController
         private readonly string gameCode;
         private bool active;
         private bool secondaryActive;
+        private PowerSyncSession filteredHit;
 
         public string GameCode { get { return gameCode; } }
 
@@ -108,10 +109,14 @@ namespace TouhouSpeedController
             gameCode = code;
         }
 
+        private InvincibilityPatch(PowerSyncSession session)
+        { filteredHit=session; gameCode="TH09 P1"; }
+
         public static InvincibilityPatch Enable(Process process)
         {
             if (process == null) throw new ArgumentNullException("process");
             string name = process.ProcessName.ToLowerInvariant();
+            if(name=="th09") return new InvincibilityPatch(PowerSyncSession.Attach(process,PowerSyncProfile.Th09Hit));
             long hitRva;
             byte[] entry;
             byte[] replacement = ReturnVoid;
@@ -164,6 +169,22 @@ namespace TouhouSpeedController
                 hitRva = Th11HitTransitionRva;
                 entry = Th11ExpectedEntry;
                 code = "TH11";
+            }
+            else if(name=="th08")
+            {
+                PracticeMemoryAccess.VerifySupportedDirectGame(process,"TH08");
+                hitRva=0x4A930; entry=new byte[]{0x55,0x8B,0xEC,0x83,0xEC,0x34};
+                replacement=new byte[]{0xC2,0x08,0x00}; code="TH08";
+            }
+            else if(name=="th12" || name=="th12c")
+            {
+                PracticeMemoryAccess.VerifySupportedDirectGame(process,"TH12");
+                hitRva=0x38370; entry=new byte[]{0x83,0xEC,0x18,0x8B,0x0D,0xC8}; code="TH12";
+            }
+            else if(name=="th13" || name=="th13c")
+            {
+                PracticeMemoryAccess.VerifySupportedDirectGame(process,"TH13");
+                hitRva=0x44CA0; entry=new byte[]{0x55,0x8B,0xEC,0x51}; code="TH13";
             }
             else if (name == "th14")
             {
@@ -272,6 +293,7 @@ namespace TouhouSpeedController
 
         public void Restore()
         {
+            if(filteredHit!=null) { filteredHit.Dispose(); filteredHit=null; }
             if (!active && !secondaryActive) return;
             if (process.HasExited) { active = false; secondaryActive = false; return; }
             if (secondaryActive)
@@ -289,7 +311,7 @@ namespace TouhouSpeedController
         public void Dispose()
         {
             Restore();
-            CloseHandle(handle);
+            if(handle!=IntPtr.Zero) CloseHandle(handle);
         }
 
         private byte[] ReadBytes(int count)

@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Collections.Generic;
 using TouhouSpeedController;
 
 internal static class PowerSyncProbe
@@ -38,7 +39,7 @@ internal static class PowerSyncProbe
             for(int i=0;i<r.Caches.Length;i++) r.Caches[i]=r.Player==0?-1:Int(r.Player+p.CacheOffsets[i]);
             return r;
         }
-        public string Hook() { return BitConverter.ToString(Bytes(Base+Profile.HookRva,5)); }
+        public string Hook() { return BitConverter.ToString(Bytes(Base+Profile.HookRva,Profile.Original.Length)); }
         public void Dispose() { CloseHandle(handle); }
     }
     private sealed class Row
@@ -67,6 +68,12 @@ internal static class PowerSyncProbe
             Directory.CreateDirectory(args[1]);
             foreach(PowerSyncProfile p in PowerSyncProfile.All)
                 File.WriteAllBytes(Path.Combine(args[1],p.Name+".bin"),PowerSyncSession.BuildCode(0x10001000,0x10000000,0x400000,p));
+            File.WriteAllBytes(Path.Combine(args[1],"th09-hit.bin"),PowerSyncSession.BuildCode(0x10001000,0x10000000,0x400000,PowerSyncProfile.Th09Hit));
+            List<string> rows=new List<string>();
+            List<PowerSyncProfile> layouts=new List<PowerSyncProfile>(PowerSyncProfile.All); layouts.Add(PowerSyncProfile.Th09Hit);
+            foreach(PowerSyncProfile p in layouts)
+                rows.Add(p.Name+"\t"+p.HookRva.ToString("X")+"\t"+BitConverter.ToString(p.Original).Replace("-","")+"\t"+p.RebuildRva.ToString("X")+"\t"+BitConverter.ToString(p.RebuildEntry).Replace("-",""));
+            File.WriteAllLines(Path.Combine(args[1],"profiles.tsv"),rows.ToArray());
             return 0;
         }
         bool exercise=args.Length>=2&&args[0]=="--exercise";

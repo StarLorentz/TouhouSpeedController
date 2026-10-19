@@ -2,7 +2,8 @@
 // Copyright (C) 2026 StarLorentz
 // Licensed under GNU GPL v3.0. See LICENSE for details.
 //
-// Resource addresses were adapted from thprac/src/thprac/thprac_th14.cpp,
+// Resource addresses were adapted from thprac/src/thprac/thprac_th08.cpp,
+// thprac_th09.cpp, thprac_th12.cpp, thprac_th13.cpp, thprac_th14.cpp,
 // thprac_th15.cpp, thprac_th16.cpp, thprac_th17.cpp, thprac_th18.cpp,
 // and thprac_th20.cpp
 // at commit 585fae1aad4b720f350655a44e3f2ec7fc0dfa25.
@@ -27,6 +28,16 @@ namespace TouhouSpeedController
         public int BombFragments;
         public int Power;
         public string GameCode;
+        public bool InGame;
+    }
+
+    internal sealed class PracticeOptions
+    {
+        public int LivesMax = 8, BombsMax = 8, FragmentsMax = 4;
+        public int PowerMin = 100, PowerMax = 400;
+        public bool HasBombs = true, HasFragments = true, IntegerPower;
+        public bool MemoryPowerLock, InfiniteResources;
+        public string LivesLabel = "残机", PowerLabel = "Power";
     }
 
     internal static class PracticeMemoryAccess
@@ -56,13 +67,32 @@ namespace TouhouSpeedController
         {
             public string GameCode;
             public string Sha256;
+            public string ProcessName;
             public long LivesRva;
             public long BombsRva;
             public long BombFragmentsRva;
             public long PowerRva;
+            public long ResourcePointerRva, PlayerPointerRva;
+            public bool FloatResources, FloatPower;
+            public int FragmentMultiplier = 1;
         }
 
         private static readonly DirectProfile[] DirectProfiles = {
+            new DirectProfile { GameCode="TH08", Sha256="330FBDBF58A710829D65277B4F312CFBB38D5448B3DF523E79350B879213D924",
+                ResourcePointerRva=0x120F510, FloatResources=true, LivesRva=0x74, BombsRva=0x80, PowerRva=0x98 },
+            // TH09 is P1-only: health is in half-heart units, charge is a float 0..400.
+            new DirectProfile { GameCode="TH09", Sha256="10350095BCF95EDB59E03BEE9849A2DC8A7714B4927AD5909C569C550FCE6822",
+                ResourcePointerRva=0xA7D94, LivesRva=0xA8, PowerRva=0x30388, FloatPower=true },
+            new DirectProfile { GameCode="TH12", Sha256="D8D644D2E64957A3031B1A1399D0502E1DDAA5252D2C4E492770AD6717827628",
+                LivesRva=0xB0C98, BombsRva=0xB0CA0, BombFragmentsRva=0xB0CA4, PowerRva=0xB0C48,
+                PlayerPointerRva=0xB4514, FragmentMultiplier=2 },
+            new DirectProfile { GameCode="TH12", ProcessName="th12c", Sha256="15AECA37D7D4EC8089C5227B0871CABA0B0D908B1C1D23365E6713EA7F0BD403",
+                LivesRva=0xB0C98, BombsRva=0xB0CA0, BombFragmentsRva=0xB0CA4, PowerRva=0xB0C48,
+                PlayerPointerRva=0xB4514, FragmentMultiplier=2 },
+            new DirectProfile { GameCode="TH13", Sha256="422F40AA176C9AAB7D0178CE6033802B4143921A5E0E463EF99259EF6D100A58",
+                LivesRva=0xBE7F4, BombsRva=0xBE800, BombFragmentsRva=0xBE804, PowerRva=0xBE7E8, PlayerPointerRva=0xC22C4 },
+            new DirectProfile { GameCode="TH13", ProcessName="th13c", Sha256="29028D0D74EF5D518A6A74F7D68766F57C6CDCBBAF428F3190E4C2779F45F91C",
+                LivesRva=0xBE7F4, BombsRva=0xBE800, BombFragmentsRva=0xBE804, PowerRva=0xBE7E8, PlayerPointerRva=0xC22C4 },
             new DirectProfile { GameCode = "TH14", Sha256 = "F08E885E28D2E0FC8C579E88034DD7DE8F2A648D8F08CE781CF08EADC9FFE353",
                 LivesRva = 0xF5864, BombsRva = 0xF5870, BombFragmentsRva = 0xF5874, PowerRva = 0xF5858 },
             new DirectProfile { GameCode = "TH15", Sha256 = Th15JapaneseSha256,
@@ -96,14 +126,38 @@ namespace TouhouSpeedController
         {
             if (process == null) throw new ArgumentNullException("process");
             string name = process.ProcessName.ToLowerInvariant();
-            if (name != "th14" && name != "th15" && name != "th17" && name != "th18" && name != "th20")
+            if (!SupportsDirectName(name))
                 throw new NotSupportedException("当前进程尚未接入基础资源修改。");
             sha256 = ComputeSha256(process.MainModule.FileName);
             foreach (DirectProfile profile in DirectProfiles)
-                if (name == profile.GameCode.ToLowerInvariant() &&
+                if (name == (profile.ProcessName ?? profile.GameCode.ToLowerInvariant()) &&
                     String.Equals(sha256, profile.Sha256, StringComparison.OrdinalIgnoreCase))
                     return profile;
             throw new NotSupportedException("这个游戏 EXE 的资源位置尚未验证，已拒绝访问。SHA-256：" + sha256);
+        }
+
+        public static bool SupportsDirectName(string name)
+        {
+            foreach (DirectProfile p in DirectProfiles)
+                if (String.Equals(name,p.ProcessName ?? p.GameCode,StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
+        public static string CanonicalName(string name)
+        {
+            name = name.ToLowerInvariant();
+            return name=="th12c" ? "th12" : name=="th13c" ? "th13" : name;
+        }
+
+        public static PracticeOptions Options(string name)
+        {
+            name=CanonicalName(name); PracticeOptions o=new PracticeOptions();
+            if(name=="th08") { o.HasFragments=false; o.PowerMin=0; o.PowerMax=12800; o.IntegerPower=true; o.MemoryPowerLock=true; o.InfiniteResources=true; }
+            if(name=="th09") { o.LivesMax=10; o.LivesLabel="生命"; o.HasBombs=false; o.HasFragments=false; o.PowerMin=0; o.PowerLabel="蓄力"; o.MemoryPowerLock=true; o.InfiniteResources=true; }
+            if(name=="th12") { o.FragmentsMax=2; o.InfiniteResources=true; }
+            if(name=="th13") { o.FragmentsMax=7; o.InfiniteResources=true; }
+            if(name=="th16") o.InfiniteResources=true;
+            return o;
         }
 
         internal static void VerifySupportedDirectGame(Process process, string gameCode)
@@ -111,22 +165,50 @@ namespace TouhouSpeedController
             string sha256;
             DirectProfile profile = IdentifyDirectProfile(process, out sha256);
             if (profile.GameCode != gameCode)
-                throw new NotSupportedException(gameCode + " 无敌补丁不能用于其他作品。");
+                throw new NotSupportedException(gameCode + " 配置不能用于其他作品。");
         }
 
         private static PracticeSnapshot ReadDirectSnapshot(IntPtr handle, long moduleBase, DirectProfile profile, string sha256)
         {
+            PracticeOptions options=Options(profile.GameCode);
+            long data=ResolveData(handle,moduleBase,profile);
             PracticeSnapshot snapshot = new PracticeSnapshot();
-            snapshot.ProfileId = profile.GameCode + " 日文版（本机已识别版本）";
+            snapshot.ProfileId = profile.GameCode + (profile.ProcessName==null ? " 日文版" : " 汉化版") + "（本机已识别版本）";
             snapshot.GameCode = profile.GameCode;
             snapshot.Sha256 = sha256;
-            snapshot.Lives = ReadInt32(handle, moduleBase + profile.LivesRva);
-            snapshot.Bombs = ReadInt32(handle, moduleBase + profile.BombsRva);
-            snapshot.BombFragments = ReadInt32(handle, moduleBase + profile.BombFragmentsRva);
-            snapshot.Power = ReadInt32(handle, moduleBase + profile.PowerRva);
-            Validate(snapshot);
+            snapshot.Lives = ReadResource(handle,data+profile.LivesRva,profile.FloatResources,1);
+            snapshot.Bombs = options.HasBombs ? ReadResource(handle,data+profile.BombsRva,profile.FloatResources,1) : 0;
+            snapshot.BombFragments = options.HasFragments ? ReadInt32(handle,data+profile.BombFragmentsRva)/profile.FragmentMultiplier : 0;
+            snapshot.Power = ReadResource(handle,data+profile.PowerRva,profile.FloatResources||profile.FloatPower,profile.FloatResources ? 100 : 1);
+            if(snapshot.Lives < -1 || snapshot.Lives>99 || snapshot.Bombs<0 || snapshot.Bombs>99 ||
+                snapshot.BombFragments<0 || snapshot.BombFragments>99 || snapshot.Power<0 || snapshot.Power>options.PowerMax)
+                throw new InvalidDataException("资源读数超出本作范围，请进入关卡后重试。");
+            snapshot.InGame=profile.ResourcePointerRva!=0 || profile.PlayerPointerRva!=0
+                ? (profile.GameCode=="TH08" ? ReadInt32(handle,moduleBase+0x13CE8B0)==2
+                   : profile.GameCode=="TH09" ? ReadInt32(handle,data+8)==0
+                   : ReadInt32(handle,moduleBase+profile.PlayerPointerRva)!=0)
+                : snapshot.Power>=100 && snapshot.Power<=400;
             return snapshot;
         }
+
+        private static long ResolveData(IntPtr handle,long moduleBase,DirectProfile profile)
+        {
+            if(profile.ResourcePointerRva==0) return moduleBase;
+            uint p=(uint)ReadInt32(handle,moduleBase+profile.ResourcePointerRva);
+            if(p<0x10000) throw new InvalidOperationException("尚未创建玩家数据，请先进入关卡。");
+            return p;
+        }
+
+        private static int ReadResource(IntPtr h,long address,bool floating,int scale)
+        {
+            int raw=ReadInt32(h,address);
+            if(!floating) return raw;
+            float value=BitConverter.ToSingle(BitConverter.GetBytes(raw),0);
+            if(Single.IsNaN(value)||Single.IsInfinity(value)||value < -1 || value>1000) throw new InvalidDataException("浮点资源读数无效。");
+            return (int)Math.Round(value*scale,MidpointRounding.AwayFromZero);
+        }
+        private static void WriteResource(IntPtr h,long address,int value,bool floating,int scale)
+        { WriteInt32(h,address,floating ? BitConverter.ToInt32(BitConverter.GetBytes((float)value/scale),0) : value); }
 
         public static PracticeSnapshot ReadDirect(Process process)
         {
@@ -141,9 +223,14 @@ namespace TouhouSpeedController
 
         public static PracticeSnapshot WriteDirect(Process process, int? lives, int? bombs, int? bombFragments, int? power)
         {
-            ValidateRequestedValues(lives, bombs, bombFragments, power);
             string sha256;
             DirectProfile profile = IdentifyDirectProfile(process, out sha256);
+            PracticeOptions options=Options(profile.GameCode);
+            if(!lives.HasValue && !bombs.HasValue && !bombFragments.HasValue && !power.HasValue) throw new ArgumentException("至少选择一项资源。");
+            if(lives.HasValue && (lives<0 || lives>options.LivesMax)) throw new ArgumentOutOfRangeException("lives");
+            if(bombs.HasValue && (!options.HasBombs || bombs<0 || bombs>options.BombsMax)) throw new ArgumentOutOfRangeException("bombs");
+            if(bombFragments.HasValue && (!options.HasFragments || bombFragments<0 || bombFragments>options.FragmentsMax)) throw new ArgumentOutOfRangeException("bombFragments");
+            if(power.HasValue && (power<options.PowerMin || power>options.PowerMax || (options.IntegerPower && power.Value%100!=0))) throw new ArgumentOutOfRangeException("power");
             long moduleBase = process.MainModule.BaseAddress.ToInt64();
             IntPtr handle = OpenProcess(ProcessVmRead | ProcessVmWrite | ProcessVmOperation | ProcessQueryLimitedInformation,
                 false, process.Id);
@@ -152,14 +239,20 @@ namespace TouhouSpeedController
             try
             {
                 PracticeSnapshot before = ReadDirectSnapshot(handle, moduleBase, profile, sha256);
-                if (before.Power < 100 || before.Power > 400)
+                if (!before.InGame)
                     throw new InvalidOperationException("请进入实际关卡并重新读取后，再应用数值。");
+                long data=ResolveData(handle,moduleBase,profile);
+                // Keep the exact native DWORDs, including float fractions and TH12 half-fragments, for rollback.
+                int oldLives=ReadInt32(handle,data+profile.LivesRva);
+                int oldBombs=options.HasBombs ? ReadInt32(handle,data+profile.BombsRva) : 0;
+                int oldFragments=options.HasFragments ? ReadInt32(handle,data+profile.BombFragmentsRva) : 0;
+                int oldPower=ReadInt32(handle,data+profile.PowerRva);
                 try
                 {
-                    if (lives.HasValue) WriteInt32(handle, moduleBase + profile.LivesRva, lives.Value);
-                    if (bombs.HasValue) WriteInt32(handle, moduleBase + profile.BombsRva, bombs.Value);
-                    if (bombFragments.HasValue) WriteInt32(handle, moduleBase + profile.BombFragmentsRva, bombFragments.Value);
-                    if (power.HasValue) WriteInt32(handle, moduleBase + profile.PowerRva, power.Value);
+                    if (lives.HasValue) WriteResource(handle,data+profile.LivesRva,lives.Value,profile.FloatResources,1);
+                    if (bombs.HasValue) WriteResource(handle,data+profile.BombsRva,bombs.Value,profile.FloatResources,1);
+                    if (bombFragments.HasValue) WriteInt32(handle,data+profile.BombFragmentsRva,bombFragments.Value*profile.FragmentMultiplier);
+                    if (power.HasValue) WriteResource(handle,data+profile.PowerRva,power.Value,profile.FloatResources||profile.FloatPower,profile.FloatResources ? 100 : 1);
                     PracticeSnapshot after = ReadDirectSnapshot(handle, moduleBase, profile, sha256);
                     if ((lives.HasValue && after.Lives != lives.Value) ||
                         (bombs.HasValue && after.Bombs != bombs.Value) ||
@@ -170,10 +263,13 @@ namespace TouhouSpeedController
                 }
                 catch
                 {
-                    if (lives.HasValue) TryWriteInt32(handle, moduleBase + profile.LivesRva, before.Lives);
-                    if (bombs.HasValue) TryWriteInt32(handle, moduleBase + profile.BombsRva, before.Bombs);
-                    if (bombFragments.HasValue) TryWriteInt32(handle, moduleBase + profile.BombFragmentsRva, before.BombFragments);
-                    if (power.HasValue) TryWriteInt32(handle, moduleBase + profile.PowerRva, before.Power);
+                    // Do not roll back into a replaced player allocation after a scene switch.
+                    if(ResolveData(handle,moduleBase,profile)==data) {
+                        if (lives.HasValue) TryWriteInt32(handle,data+profile.LivesRva,oldLives);
+                        if (bombs.HasValue) TryWriteInt32(handle,data+profile.BombsRva,oldBombs);
+                        if (bombFragments.HasValue) TryWriteInt32(handle,data+profile.BombFragmentsRva,oldFragments);
+                        if (power.HasValue) TryWriteInt32(handle,data+profile.PowerRva,oldPower);
+                    }
                     throw;
                 }
             }
@@ -266,7 +362,7 @@ namespace TouhouSpeedController
 
             string processName = process.ProcessName.ToLowerInvariant();
             if (processName != "th16" && processName != "th16c")
-                throw new NotSupportedException("当前练习功能只支持 TH16 日文版。");
+                throw new NotSupportedException("当前游戏或 EXE 版本尚未接入练习功能。");
 
             string sha256 = ComputeSha256(process.MainModule.FileName);
             if (String.Equals(sha256, Th16JapaneseSha256, StringComparison.OrdinalIgnoreCase))

@@ -211,6 +211,7 @@ namespace TouhouSpeedController
         private readonly Button restore = new Button();
         private readonly Button refresh = new Button();
         private readonly Label practiceSupport = new Label();
+        private Label practiceLivesLabel, practicePowerLabel;
         private readonly NumericUpDown practiceLives = new NumericUpDown();
         private readonly NumericUpDown practiceBombs = new NumericUpDown();
         private readonly NumericUpDown practiceBombFragments = new NumericUpDown();
@@ -228,6 +229,7 @@ namespace TouhouSpeedController
         private readonly System.Windows.Forms.Timer powerSyncTimer = new System.Windows.Forms.Timer();
         private PowerSyncSession powerSync;
         private bool updatingPowerLock, powerRequestPending;
+        private int memoryPowerTarget;
         private readonly System.Windows.Forms.Timer practiceFreezeTimer = new System.Windows.Forms.Timer();
         private readonly System.Windows.Forms.Timer focusHotkeyFallbackTimer = new System.Windows.Forms.Timer();
         private InvincibilityPatch activeInvincibility;
@@ -285,7 +287,7 @@ namespace TouhouSpeedController
             practiceSupport.Text = "支持状态：选中游戏后读取当前值";
             practiceGroup.Controls.Add(practiceSupport);
 
-            practiceGroup.Controls.Add(NewLabel("残机", 14, 57, 42, 24, 9F, false));
+            practiceGroup.Controls.Add(practiceLivesLabel=NewLabel("残机", 14, 57, 42, 24, 9F, false));
             ConfigurePracticeNumber(practiceLives, 62, 54, 55, 0, 8, 0, 1);
             practiceGroup.Controls.Add(practiceLives);
             ConfigurePracticeApplyButton(applyPracticeLives, "应用", 125, 53, delegate { ApplyPracticeFields(true, false, false, false); });
@@ -307,7 +309,7 @@ namespace TouhouSpeedController
             ConfigurePracticeApplyButton(applyPracticeBombFragments, "应用", 125, 90, delegate { ApplyPracticeFields(false, false, true, false); });
             practiceGroup.Controls.Add(applyPracticeBombFragments);
 
-            practiceGroup.Controls.Add(NewLabel("Power", 250, 94, 44, 24, 9F, false));
+            practiceGroup.Controls.Add(practicePowerLabel=NewLabel("Power", 250, 94, 44, 24, 9F, false));
             ConfigurePracticeNumber(practicePower, 298, 91, 60, 0, 4, 2, 0.01m);
             practiceGroup.Controls.Add(practicePower);
             ConfigurePracticeApplyButton(applyPracticePower, "应用", 365, 90, delegate { ApplyPracticeFields(false, false, false, true); });
@@ -616,6 +618,7 @@ namespace TouhouSpeedController
             SetPracticeInputsEnabled(false);
             GameProcess selected = processBox.SelectedItem as GameProcess;
             string name = selected == null ? String.Empty : selected.Process.ProcessName.ToLowerInvariant();
+            ConfigurePracticeOptions(name);
             bool invincibilityOnly = name == "th06c" || name == "th06nc" || name == "th07" || name == "th10" ||
                 name == "th10chs" || name == "th10cht" || name == "th11" || name == "th11c";
             readPractice.Enabled = !invincibilityOnly;
@@ -638,29 +641,20 @@ namespace TouhouSpeedController
             try
             {
                 string name = game.Process.ProcessName.ToLowerInvariant();
-                bool direct = name == "th14" || name == "th15" || name == "th17" || name == "th18" || name == "th20";
+                bool direct = PracticeMemoryAccess.SupportsDirectName(name);
                 PracticeSnapshot snapshot = direct
                     ? PracticeMemoryAccess.ReadDirect(game.Process)
                     : PracticeMemoryAccess.ReadTh16(game.Process);
                 practiceSupport.Text = "支持状态：已识别 " + snapshot.ProfileId;
                 practiceSupport.ForeColor = Color.DarkGreen;
-                practiceLives.Value = snapshot.Lives;
-                practiceBombs.Value = snapshot.Bombs;
-                practiceBombFragments.Value = snapshot.BombFragments;
-                practicePower.Value = snapshot.Power / 100m;
-                bool inGame = snapshot.Power >= 100 && snapshot.Power <= 400;
+                ConfigurePracticeOptions(name);
+                ShowPracticeSnapshot(snapshot);
+                bool inGame = direct ? snapshot.InGame : snapshot.Power >= 100 && snapshot.Power <= 400;
                 SetPracticeInputsEnabled(inGame);
-                if (direct)
-                {
-                    infiniteLives.Enabled = false;
-                    infiniteBombs.Enabled = false;
-                    invincibility.Enabled = (name == "th14" || name == "th15" ||
-                        name == "th17" || name == "th18" || name == "th20") && inGame;
-                }
                 SetStatus(inGame
-                    ? (direct
-                        ? String.Format("{0} 资源已读取；可修改残机、Bomb、Bomb碎片和Power。攻击效果可能延迟。", snapshot.GameCode)
-                        : "TH16 当前资源读取成功，可以修改后点击“应用数值”。")
+                    ? (name=="th09" ? "TH09 仅操作 P1；生命 10=5颗心，蓄力 4.00=满槽。此作无 Bomb、B碎片或普通 Power。"
+                       : name=="th08" ? "TH08 已读取；Power 范围 0–128，按本作原规则影响射击；此作没有 B碎片。"
+                       : "资源已读取；可单项应用或全部应用，Power 同步在游戏运行时完成。")
                     : "版本已识别；请进入实际关卡后重新读取，再应用数值。", false);
             }
             catch (InvalidDataException ex)
@@ -691,6 +685,9 @@ namespace TouhouSpeedController
                 int? fragments = changeBombFragments ? (int?)Decimal.ToInt32(practiceBombFragments.Value) : null;
                 int? power = changePower ? (int?)Decimal.ToInt32(practicePower.Value * 100m) : null;
                 string name = game.Process.ProcessName.ToLowerInvariant();
+                PracticeOptions options=PracticeMemoryAccess.Options(name);
+                if(!options.HasBombs) { changeBombs=false; bombs=null; }
+                if(!options.HasFragments) { changeBombFragments=false; fragments=null; }
                 bool syncPower = PowerSyncProfile.Supports(name) && changePower;
                 bool direct = name != "th16";
                 if (syncPower) EnsurePowerSync(game.Process);
@@ -704,11 +701,11 @@ namespace TouhouSpeedController
                     powerRequestPending = true;
                     powerSyncTimer.Start();
                 }
-                practiceLives.Value = snapshot.Lives;
-                practiceBombs.Value = snapshot.Bombs;
-                practiceBombFragments.Value = snapshot.BombFragments;
+                if(changePower && options.MemoryPowerLock && lockPower.Checked) { memoryPowerTarget=power.Value; practiceFreezeTimer.Start(); }
+                ShowPracticeSnapshot(snapshot);
                 practicePower.Value = syncPower ? power.Value / 100m : snapshot.Power / 100m;
                 SetStatus(syncPower ? "Power 请求已提交；回到游戏后由游戏更新线程同步攻击。"
+                    : changePower && options.MemoryPowerLock ? options.PowerLabel+" 已应用；锁定勾选后会维持输入值。"
                     : changePower
                     ? "Power 数值已写入；攻击需等游戏重建配置（如拾取 P 跨整档）才同步。"
                     : "资源数值已写入并校验；游戏界面可能稍后才同步。", false);
@@ -726,6 +723,23 @@ namespace TouhouSpeedController
         private void PowerLockChanged(object sender, EventArgs e)
         {
             if (updatingPowerLock) return;
+            GameProcess selectedPowerGame=processBox.SelectedItem as GameProcess;
+            if(selectedPowerGame!=null && PracticeMemoryAccess.Options(selectedPowerGame.Process.ProcessName).MemoryPowerLock)
+            {
+                if(!lockPower.Checked) {
+                    if(!HasInfiniteSelection()) practiceFreezeTimer.Stop();
+                    SetStatus("锁定已关闭，恢复游戏自身的增减规则。",false); return;
+                }
+                try {
+                    memoryPowerTarget=Decimal.ToInt32(practicePower.Value*100m);
+                    PracticeMemoryAccess.WriteDirect(selectedPowerGame.Process,null,null,null,memoryPowerTarget);
+                    practiceFreezeTimer.Start(); SetStatus("已锁定当前输入值；应用新值可更换锁定目标。",false);
+                } catch(Exception ex) {
+                    updatingPowerLock=true; lockPower.Checked=false; updatingPowerLock=false;
+                    SetStatus("锁定失败："+ex.Message,true);
+                }
+                return;
+            }
             if (!lockPower.Checked)
             {
                 try { if (powerSync != null) powerSync.Unlock(); SetStatus("Power 锁定已关闭，恢复游戏自身的增减规则。", false); }
@@ -740,7 +754,7 @@ namespace TouhouSpeedController
             {
                 GameProcess game = processBox.SelectedItem as GameProcess;
                 if (game == null || !PowerSyncProfile.Supports(game.Process.ProcessName))
-                    throw new NotSupportedException("Power 即时同步和锁定支持已识别的 TH14–TH18、TH20。");
+                    throw new NotSupportedException("此版本尚未接入 Power 同步和锁定。");
                 EnsurePowerSync(game.Process);
                 powerSync.Request(Decimal.ToInt32(practicePower.Value * 100m), true);
                 powerRequestPending = true;
@@ -877,12 +891,14 @@ namespace TouhouSpeedController
 
             try
             {
-                PracticeMemoryAccess.WriteTh16(
-                    game.Process,
-                    infiniteLives.Checked ? (int?)Decimal.ToInt32(practiceLives.Value) : null,
-                    infiniteBombs.Checked ? (int?)Decimal.ToInt32(practiceBombs.Value) : null,
-                    null,
-                    null);
+                int? lives=infiniteLives.Checked ? (int?)Decimal.ToInt32(practiceLives.Value) : null;
+                int? bombs=infiniteBombs.Checked ? (int?)Decimal.ToInt32(practiceBombs.Value) : null;
+                PracticeOptions options=PracticeMemoryAccess.Options(game.Process.ProcessName);
+                int? power=options.MemoryPowerLock && lockPower.Checked ? (int?)memoryPowerTarget : null;
+                if(PracticeMemoryAccess.CanonicalName(game.Process.ProcessName)=="th16")
+                    PracticeMemoryAccess.WriteTh16(game.Process,lives,bombs,null,null);
+                else if(options.InfiniteResources) PracticeMemoryAccess.WriteDirect(game.Process,lives,bombs,null,power);
+                else throw new NotSupportedException("此作尚未开放无限资源。");
                 return true;
             }
             catch (Exception ex)
@@ -895,7 +911,9 @@ namespace TouhouSpeedController
 
         private bool HasInfiniteSelection()
         {
-            return infiniteLives.Checked || infiniteBombs.Checked;
+            GameProcess selected=processBox.SelectedItem as GameProcess;
+            return infiniteLives.Checked || infiniteBombs.Checked ||
+                (selected!=null && PracticeMemoryAccess.Options(selected.Process.ProcessName).MemoryPowerLock && lockPower.Checked);
         }
 
         private void StopInfiniteResources()
@@ -906,6 +924,10 @@ namespace TouhouSpeedController
             {
                 infiniteLives.Checked = false;
                 infiniteBombs.Checked = false;
+                GameProcess selected=processBox.SelectedItem as GameProcess;
+                if(selected!=null && PracticeMemoryAccess.Options(selected.Process.ProcessName).MemoryPowerLock) {
+                    updatingPowerLock=true; lockPower.Checked=false; updatingPowerLock=false;
+                }
             }
             finally { updatingInfiniteChecks = false; }
         }
@@ -925,20 +947,45 @@ namespace TouhouSpeedController
 
         private void SetPracticeInputsEnabled(bool enabled)
         {
+            GameProcess selected=processBox.SelectedItem as GameProcess;
+            PracticeOptions options=PracticeMemoryAccess.Options(selected==null ? "" : selected.Process.ProcessName);
+            SetPracticeInputsEnabled(enabled,options,selected!=null && PowerSyncProfile.Supports(selected.Process.ProcessName));
+        }
+        private void SetPracticeInputsEnabled(bool enabled,PracticeOptions options,bool powerSupported)
+        {
             practiceLives.Enabled = enabled;
-            practiceBombs.Enabled = enabled;
-            practiceBombFragments.Enabled = enabled;
+            practiceBombs.Enabled = enabled && options.HasBombs;
+            practiceBombFragments.Enabled = enabled && options.HasFragments;
             practicePower.Enabled = enabled;
-            GameProcess powerGame = processBox.SelectedItem as GameProcess;
-            lockPower.Enabled = enabled && powerGame != null && PowerSyncProfile.Supports(powerGame.Process.ProcessName);
+            lockPower.Enabled = enabled && (powerSupported||options.MemoryPowerLock);
             applyPracticeLives.Enabled = enabled;
-            applyPracticeBombs.Enabled = enabled;
-            applyPracticeBombFragments.Enabled = enabled;
+            applyPracticeBombs.Enabled = enabled && options.HasBombs;
+            applyPracticeBombFragments.Enabled = enabled && options.HasFragments;
             applyPracticePower.Enabled = enabled;
             applyPracticeAll.Enabled = enabled;
-            infiniteLives.Enabled = enabled;
-            infiniteBombs.Enabled = enabled;
+            infiniteLives.Enabled = enabled && options.InfiniteResources;
+            infiniteBombs.Enabled = enabled && options.InfiniteResources && options.HasBombs;
             invincibility.Enabled = enabled || activeInvincibility != null;
+        }
+
+        private void ConfigurePracticeOptions(string name)
+        {
+            PracticeOptions o=PracticeMemoryAccess.Options(name);
+            practiceLivesLabel.Text=o.LivesLabel; practicePowerLabel.Text=o.PowerLabel;
+            practiceLives.Value=0; practiceLives.Maximum=o.LivesMax;
+            practiceBombs.Value=0; practiceBombs.Maximum=o.BombsMax;
+            practiceBombFragments.Value=0; practiceBombFragments.Maximum=o.FragmentsMax;
+            practicePower.Value=0; practicePower.Maximum=o.PowerMax/100m;
+            practicePower.DecimalPlaces=o.IntegerPower ? 0 : 2;
+            practicePower.Increment=o.IntegerPower ? 1m : 0.01m;
+            invincibility.Text=PracticeMemoryAccess.CanonicalName(name)=="th09" ? "无敌 P1（实验）" : "无敌（实验）";
+        }
+        private void ShowPracticeSnapshot(PracticeSnapshot snapshot)
+        {
+            practiceLives.Value=Math.Max(0,Math.Min(practiceLives.Maximum,snapshot.Lives));
+            practiceBombs.Value=Math.Max(0,Math.Min(practiceBombs.Maximum,snapshot.Bombs));
+            practiceBombFragments.Value=Math.Max(0,Math.Min(practiceBombFragments.Maximum,snapshot.BombFragments));
+            practicePower.Value=Math.Max(0,Math.Min(practicePower.Maximum,snapshot.Power/100m));
         }
 
         private void SetStatus(string text, bool error)

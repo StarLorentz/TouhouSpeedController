@@ -6,6 +6,7 @@ import pefile
 
 root = Path.home() / 'Desktop/game/东方'
 specs = {
+    'th12': (0x4625f5, 0x4385b0), 'th13': (0x470bfe, 0x444df0),
     'th14': (0x401382, 0x44f970), 'th15': (0x4015f2, 0x4567b0),
     'th16': (0x401567, 0x4440e0), 'th17': (0x4013ad, 0x449630),
     'th18': (0x4013ed, 0x45d5e0), 'th20': (0x412a65, 0x4faca0),

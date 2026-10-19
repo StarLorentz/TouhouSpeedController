@@ -20,6 +20,7 @@ internal static class PowerProfileStubChecks
     {
         if(Environment.Is64BitProcess) throw new Exception("Compile /platform:x86");
         foreach(PowerSyncProfile profile in PowerSyncProfile.All) Run(profile);
+        RunTh09();
         Console.WriteLine("PASS total="+total); return 0;
     }
     private static void Run(PowerSyncProfile p)
@@ -33,7 +34,8 @@ internal static class PowerProfileStubChecks
             Bytes(code,PowerSyncSession.BuildCode((uint)code,(uint)d,(uint)b,p));
             // Synthetic rebuild verifies this and the optional native callee-pop argument.
             List<byte> native=new List<byte>();
-            native.AddRange(new byte[]{0x81,0xF9}); native.AddRange(BitConverter.GetBytes((uint)(player+p.ThisOffset)));
+            native.AddRange(p.CallMode==1 ? new byte[]{0x81,0x7C,0x24,0x04} : p.CallMode==2 ? new byte[]{0x81,0xFF} : new byte[]{0x81,0xF9});
+            native.AddRange(BitConverter.GetBytes((uint)(player+p.ThisOffset)));
             native.AddRange(new byte[]{0x74,0x0A,0xC7,0x05}); native.AddRange(BitConverter.GetBytes((uint)(d+56))); native.AddRange(BitConverter.GetBytes(1));
             if(p.Argument.HasValue)
             {
@@ -43,14 +45,24 @@ internal static class PowerProfileStubChecks
             native.Add(0xA1); native.AddRange(BitConverter.GetBytes((uint)(b+p.PowerRva)));
             native.AddRange(new byte[]{0x6A,0x64,0x31,0xD2,0xF7,0x34,0x24,0x83,0xC4,0x04});
             foreach(uint cache in p.CacheOffsets)
-            { native.AddRange(new byte[]{0x89,0x81}); native.AddRange(BitConverter.GetBytes(unchecked(cache-p.ThisOffset))); }
-            native.AddRange(p.Argument.HasValue?new byte[]{0xC2,0x04,0}:new byte[]{0xC3});
+            { native.Add(0xA3); native.AddRange(BitConverter.GetBytes((uint)(player+cache))); }
+            native.AddRange(p.Argument.HasValue||p.CallMode==1?new byte[]{0xC2,0x04,0}:new byte[]{0xC3});
             Bytes(b+p.RebuildRva,native.ToArray());
             bool cookie=p.Name=="th20";
-            Bytes(b+p.HookRva+5,cookie?new byte[]{0x5F,0x5E,0x5B,0x8B,0xE5,0x5D,0xC3}:new byte[]{0x8B,0xE5,0x5D,0xC3});
             long entry=d+0x3000;
-            Bytes(entry,0x55,0x8B,0xEC,0x53,0x56,0x57,0xBE,0x7B,0,0,0,0xB8,0x7B,0,0,0,0xE9);
-            Bytes(entry+17,BitConverter.GetBytes(unchecked((int)(code-entry-21))));
+            byte[] prologue;
+            if(p.Name=="th12") {
+                Bytes(b+p.HookRva+(uint)p.Original.Length,0x5F,0x5E,0x5B,0xC3);
+                prologue=new byte[]{0x53,0x56,0x57,0x83,0xEC,8,0xC7,0x04,0x24,123,0,0,0};
+            } else if(p.Name=="th13") {
+                Bytes(b+p.HookRva+(uint)p.Original.Length,0x5D,0x5F,0x5E,0x5B,0xC3);
+                prologue=new byte[]{0x53,0x56,0x57,0x55,0x8B,0xEC,0x83,0xEC,4,0xC7,0x45,0xFC,123,0,0,0};
+            } else {
+                Bytes(b+p.HookRva+(uint)p.Original.Length,cookie?new byte[]{0x5F,0x5E,0x5B,0x8B,0xE5,0x5D,0xC3}:new byte[]{0x8B,0xE5,0x5D,0xC3});
+                prologue=new byte[]{0x55,0x8B,0xEC,0x53,0x56,0x57,0xBE,0x7B,0,0,0,0xB8,0x7B,0,0,0};
+            }
+            Bytes(entry,prologue); Bytes(entry+prologue.Length,0xE9);
+            Bytes(entry+prologue.Length+1,BitConverter.GetBytes(unchecked((int)(code-entry-prologue.Length-5))));
             Frame frame=(Frame)Marshal.GetDelegateForFunctionPointer(new IntPtr(entry),typeof(Frame));
             Put(d,1); Put(d+20,-1); Put(b+p.PlayerRva,(int)player); Put(player+p.StateOffset,1); Put(b+p.DivisorRva,100);
             if(p.OwnerOffset!=0) Put(player+p.OwnerOffset,(int)(b+p.OwnerRva));
@@ -89,5 +101,26 @@ internal static class PowerProfileStubChecks
             Check(frame()==123&&Get(d+28)==count&&Get(b+p.PowerRva)==100,p.Name+" disabled");
         }
         finally { VirtualFree(image,UIntPtr.Zero,0x8000); VirtualFree(block,UIntPtr.Zero,0x8000); }
+    }
+
+    private static void RunTh09()
+    {
+        IntPtr image=VirtualAlloc(IntPtr.Zero,(UIntPtr)0x200000,0x3000,0x40);
+        IntPtr block=VirtualAlloc(IntPtr.Zero,(UIntPtr)0x10000,0x3000,0x40);
+        long b=(uint)image.ToInt32(),d=(uint)block.ToInt32(),player=d+0x5000,code=d+4096,entry=d+0x3000;
+        if(image==IntPtr.Zero||block==IntPtr.Zero) throw new Exception("Allocation failed");
+        try {
+            PowerSyncProfile p=PowerSyncProfile.Th09Hit;
+            Bytes(code,PowerSyncSession.BuildCode((uint)code,(uint)d,(uint)b,p));
+            Bytes(b+p.RebuildRva,0xFF,0x05); Bytes(b+p.RebuildRva+2,BitConverter.GetBytes((uint)(d+56))); Bytes(b+p.RebuildRva+6,0xC3);
+            Bytes(b+p.HookRva+5,0xB8,1,0,0,0,0xC3);
+            List<byte> start=new List<byte>(new byte[]{0x56,0xBE}); start.AddRange(BitConverter.GetBytes((uint)player));
+            start.AddRange(new byte[]{0x8B,0xCE,0xB8}); start.AddRange(BitConverter.GetBytes((uint)code)); start.AddRange(new byte[]{0xFF,0xD0,0x5E,0xC3});
+            Bytes(entry,start.ToArray()); Frame frame=(Frame)Marshal.GetDelegateForFunctionPointer(new IntPtr(entry),typeof(Frame));
+            Put(d,1); Put(player+8,0);
+            Check(frame()==1&&Get(d+56)==0,"th09 P1 hit suppressed");
+            Put(player+8,1); Check(frame()==1&&Get(d+56)==1,"th09 P2 hit remains native");
+            Put(d,0); Put(player+8,0); Check(frame()==1&&Get(d+56)==2,"th09 disabled P1 hit remains native");
+        } finally { VirtualFree(image,UIntPtr.Zero,0x8000); VirtualFree(block,UIntPtr.Zero,0x8000); }
     }
 }
