@@ -1,6 +1,13 @@
 东方变速器 v0.1.1
 ==================
 
+练习功能基准归档：2026-10-19
+本包对应 practice-baseline-2026-10-19，程序文件版本仍为 0.1.1。
+与早期纯变速正式版不同，本包包含本轮已手测的资源、锁定及无敌功能。
+TH08 的练习修改已知会崩溃，请仅使用变速；其他支持边界见下方附加说明。
+本包及对应源码、校验值：
+https://github.com/StarLorentz/TouhouSpeedController/releases/tag/practice-baseline-2026-10-19
+
 一、软件定位
 ------------
 东方变速器是由 StarLorentz 制作的非官方免费工具，用于东方Project Windows

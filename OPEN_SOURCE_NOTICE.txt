@@ -9,4 +9,11 @@ Release: https://github.com/game1024/OpenSpeedy/releases/tag/3.3.11
 Source commit: 8466ca9d9f2492db14346e58a6be8b44fc7d2a2e
 License: GNU General Public License v3.0
 
-The Touhou-specific WinForms launcher source is included in src\.
+The Touhou-specific C# / WinForms and practice-feature source is included in src\.
+The complete project source and corresponding OpenSpeedy source are also
+supplied as separate archives with this release.
+
+Practice features reference and adapt thprac:
+Project: https://github.com/touhouworldcup/thprac
+Reference commit: 585fae1aad4b720f350655a44e3f2ec7fc0dfa25
+License: MIT; full notice is included in THIRD_PARTY_NOTICES.md.

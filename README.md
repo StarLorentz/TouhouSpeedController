@@ -4,6 +4,8 @@
 
 > 本项目是非官方个人作品，与上海爱丽丝幻乐团及东方Project原作者不存在授权或隶属关系。
 
+**当前练习功能基准版：2026-10-19。** [下载便携包和源码](https://github.com/StarLorentz/TouhouSpeedController/releases/tag/practice-baseline-2026-10-19)。本次按日期归档已手测的功能基准，程序文件版本仍为 0.1.1；原来的 v0.1.1 纯变速正式版继续保留。本基准以 Pre-release 发布，后续 UI 设计另行进行。
+
 ## 功能
 
 - 识别 TH06 至 TH20 正作进程
@@ -14,6 +16,11 @@
 - 自由输入 1–240 FPS，支持两位小数
 - 提供 60、45、30、15 FPS 快捷按钮
 - 关闭程序时自动恢复原速
+- Ctrl+Shift+C 呼出窗口，再按一次最小化；窗口激活时临时置顶
+- 已适配版本支持资源读取、单项或全部修改、无限残机/Bomb、Power 即时同步和锁定
+- 已适配版本支持无敌；TH09 仅操作 P1，按其机制显示生命与蓄力
+
+资源、Power 和无敌的支持范围见下表。练习功能按 EXE 指纹及原始代码字节校验，不能仅凭游戏编号或画面语言判断兼容。
 
 ## 测试状态
 
@@ -26,15 +33,32 @@
 
 本机适配范围包括：TH07 日文版；TH10、TH11、TH14、TH15、TH17 的日文版及常见汉化版进程名；TH18、TH20；以及 Steam《东方红魔乡：原典》《东方红魔乡：新典》发布版。
 
+### 练习功能基准（2026-10-19）
+
+| 作品 | 资源修改与锁定 | 无敌 | 备注 |
+| --- | --- | --- | --- |
+| TH10、TH11 | 残机修改/无限，Power 即时同步/锁定 | 支持 | Bomb 消耗 Power，没有独立 Bomb 或 B碎片 |
+| TH12、TH13、TH14、TH15、TH16、TH17、TH18、TH20 | 残机、Bomb、B碎片、Power 分别或一起修改；残机/Bomb 无限；Power 即时同步/锁定 | 支持 | B碎片专指 Bomb 碎片，不提供残机碎片设置 |
+| TH09 | P1 生命修改/无限、蓄力修改/锁定 | 仅 P1 | 不修改 P2；没有普通 Bomb、B碎片和 Power |
+| Steam TH06 原典、新典；TH07 | 未接入 | 支持 | 仅本机已识别版本 |
+| TH08 | **已知会闪退，请勿使用练习修改** | **请勿使用** | 只按变速工具使用；现有按钮不表示兼容 |
+| 旧版 TH06、TH19及其他未识别版本 | 未接入 | 未接入 | 不在本次练习功能适配范围 |
+
+本轮功能已获使用者手动测试通过；没有逐一记录的 EXE、机体和所有边界组合不另行声称已覆盖。TH08 的已知崩溃保留记录，暂不修复。TH10 的 Power 范围为 0–5，TH11 通常为 0–4、魔理沙 A 为 0–8，按原生单位取最近可表示值。详细版本和验收边界见 [随包说明](README.txt)、[TH10/TH11 记录](docs/TH10_TH11_RESOURCES.md)及[新增作品记录](docs/NEW_GAMES_20261019.md)。
+
 ## 使用方法
 
-1. 从 [Releases](https://github.com/StarLorentz/TouhouSpeedController/releases) 下载最新版 ZIP 并完整解压。
+1. 从[练习功能基准版](https://github.com/StarLorentz/TouhouSpeedController/releases/tag/practice-baseline-2026-10-19)下载 `TouhouSpeedController-practice-2026-10-19-win.zip` 并完整解压；只需要变速时也可选择原有正式版。
 2. 启动东方游戏并进入标题画面。
 3. 双击 `东方变速器.exe`，等待“应用帧率”按钮启用。
 4. 选择游戏、输入目标帧率并点击“应用帧率”。
 5. 点击“恢复 60 帧”回到正常速度。
 
 不要只复制主 EXE；四个 `bridge` / `speedpatch` 文件必须和它放在同一目录。
+
+使用资源功能时先进入关卡，选择进程并点击“读取当前值”，再分别点击对应的“应用”或“全部应用”。无限和锁定使用当前输入值作为目标；取消勾选、切换进程或退出会停止维持。支持无敌的版本可勾选“无敌”（部分作品须先读取）。Power 的攻击同步在游戏更新线程执行，暂停或死亡过渡期间须等待恢复活动。练习录像可能不同步。
+
+正常关闭会恢复变速和运行中的代码补丁，已经修改的资源数值不回滚；这些操作不修改游戏磁盘文件。TH08 请只使用变速区域。
 
 ## 安全说明
 
@@ -49,8 +73,10 @@
 
 ## 技术与许可
 
-界面及东方进程识别代码位于 [`TouhouSpeedController.cs`](TouhouSpeedController.cs)。底层 `bridge` 和 `speedpatch` 组件来自 [OpenSpeedy](https://github.com/game1024/OpenSpeedy)，通过命名管道与本程序通信。
+界面及进程识别使用 C# / WinForms，入口为 [`TouhouSpeedController.cs`](TouhouSpeedController.cs)；资源访问、无敌和 Power 同步分别位于其他四个 C# 源文件。底层 `bridge` 和 `speedpatch` 组件来自 [OpenSpeedy](https://github.com/game1024/OpenSpeedy)，通过命名管道与本程序通信。练习适配参考 [thprac](https://github.com/touhouworldcup/thprac) 的内存布局及补丁逻辑，保留其 MIT 许可和出处，见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 
 本项目按 [GNU General Public License v3.0](LICENSE) 发布。正式 Release 同时提供使用的 OpenSpeedy 对应源码包。
+
+本次归档也附带对应项目源码、OpenSpeedy 源码及 `SHA256SUMS.txt`。在 Windows PowerShell 中进入项目源码根目录运行 `./build.ps1 -OutputDirectory ./build/东方变速器` 即可构建，需要系统的 .NET Framework 4.x 编译器，无需额外安装第三方运行时。
 
 东方Project及相关角色权利归上海爱丽丝幻乐团及原作者所有。软件不包含游戏本体、音乐、立绘或原作数据。程序、快捷方式和任务栏图标使用作者提供的个人头像；窗口内展示图使用生成式 AI 制作的咲夜二次创作图像。

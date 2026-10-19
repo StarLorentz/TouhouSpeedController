@@ -14,9 +14,8 @@ The corresponding OpenSpeedy source is supplied with each binary release. See
 
 ## thprac
 
-Development of the planned practice features studies and may adapt portions of
-the open-source thprac project, including game-version recognition, memory
-layouts, and patch logic.
+The practice features study and adapt portions of the open-source thprac
+project, including game-version recognition, memory layouts, and patch logic.
 
 - Project: https://github.com/touhouworldcup/thprac
 - Reference commit for the initial research:
