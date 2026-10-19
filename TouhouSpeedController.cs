@@ -322,7 +322,7 @@ namespace TouhouSpeedController
             powerSyncTimer.Interval = 100;
             powerSyncTimer.Tick += PollPowerSync;
 
-            invincibility.Text = "无敌（实验）";
+            invincibility.Text = "无敌";
             invincibility.SetBounds(14, 130, 130, 27);
             invincibility.CheckedChanged += InvincibilityChanged;
             practiceGroup.Controls.Add(invincibility);
@@ -841,7 +841,7 @@ namespace TouhouSpeedController
                     throw new InvalidOperationException("上一个游戏的无敌补丁尚未恢复。");
                 if (game == null) throw new InvalidOperationException("请先选择已识别的东方游戏进程。");
                 activeInvincibility = InvincibilityPatch.Enable(game.Process);
-                SetStatus(activeInvincibility.GameCode + " 无敌已开启（实验功能）；练习录像可能不同步。", false);
+                SetStatus(activeInvincibility.GameCode + " 无敌已开启；练习录像可能不同步。", false);
             }
             catch (Exception ex)
             {
@@ -985,7 +985,7 @@ namespace TouhouSpeedController
             practicePower.Value=0; practicePower.Maximum=o.PowerMax/100m;
             practicePower.DecimalPlaces=o.IntegerPower ? 0 : 2;
             practicePower.Increment=o.IntegerPower ? 1m : o.PowerStep;
-            invincibility.Text=PracticeMemoryAccess.CanonicalName(name)=="th09" ? "无敌 P1（实验）" : "无敌（实验）";
+            invincibility.Text=PracticeMemoryAccess.CanonicalName(name)=="th09" ? "无敌 P1" : "无敌";
         }
         private void ShowPracticeSnapshot(PracticeSnapshot snapshot)
         {
